@@ -43,34 +43,153 @@
     return t;
   }
 
-  /* ---------- schermate ---------- */
-  function renderSetup() {
-    var input = el('input', { id: 'sid', type: 'text', inputmode: 'numeric', autocomplete: 'off', placeholder: 'es. 76561198012345678', 'aria-describedby': 'sid-hint sid-err' });
-    var err = el('div', { id: 'sid-err', class: 'err', role: 'alert' });
-    var btn = el('button', { class: 'btn', type: 'submit', text: 'Salva e continua' });
-    var form = el('form', { class: 'card', novalidate: 'novalidate', onsubmit: function (ev) {
+  /* ---------- impostazioni (setup + pannello ingranaggio) ---------- */
+  var settings = null, settingsUpdaters = [];
+  function api() { return window.api || {}; }
+  function hasScreen() { return typeof api().getSettings === 'function' && typeof api().startCalibration === 'function'; }
+  function hasStratz() { return typeof api().getSettings === 'function' && typeof api().saveStratzToken === 'function'; }
+  function refreshSettings() {
+    if (typeof api().getSettings !== 'function') return;
+    Promise.resolve(api().getSettings()).then(function (v) { settings = v; settingsUpdaters.forEach(function (f) { f(); }); }).catch(function () {});
+  }
+
+  function steamFields(formId, onSaved) {
+    var input = el('input', { id: formId + '-sid', type: 'text', inputmode: 'numeric', autocomplete: 'off', placeholder: 'es. 76561198012345678', 'aria-describedby': formId + '-hint ' + formId + '-err' });
+    if (state && state.steamId && state.steamId !== 'x') input.value = state.steamId;
+    var err = el('div', { id: formId + '-err', class: 'err', role: 'alert' });
+    var btn = el('button', { class: 'btn', type: 'submit', form: formId, text: 'Salva Steam ID' });
+    function submit(ev) {
       ev.preventDefault();
       var v = input.value.trim();
       if (!/^\d{5,20}$/.test(v)) { err.textContent = 'Inserisci solo numeri: il tuo Steam ID (o Account ID) di Dota 2.'; input.focus(); return; }
       err.textContent = ''; btn.disabled = true; btn.textContent = 'Salvataggio…';
-      Promise.resolve(window.api.saveSteamId(v)).then(function (r) {
+      Promise.resolve(api().saveSteamId(v)).then(function (r) {
         if (r && r.ok === false) throw new Error(r.error || 'Salvataggio non riuscito');
+        btn.disabled = false; btn.textContent = 'Salva Steam ID';
+        if (onSaved) onSaved();
       }).catch(function (e) {
-        err.textContent = 'Non riesco a salvare: ' + (e && e.message ? e.message : 'errore sconosciuto'); btn.disabled = false; btn.textContent = 'Salva e continua';
+        err.textContent = 'Non riesco a salvare: ' + (e && e.message ? e.message : 'errore sconosciuto'); btn.disabled = false; btn.textContent = 'Salva Steam ID';
       });
-    } }, [
-      el('label', { for: 'sid', text: 'Il tuo Steam ID' }), input,
-      el('div', { id: 'sid-hint', class: 'hint', text: 'Lo usiamo solo per leggere il tuo rank da OpenDota. Viene salvato su questo PC e non verra’ chiesto di nuovo.' }),
-      err, btn
+    }
+    var form = el('form', { id: formId, class: 'sfields', novalidate: 'novalidate', onsubmit: submit }, [
+      el('label', { for: formId + '-sid', text: 'Il tuo Steam ID' }), input,
+      el('div', { id: formId + '-hint', class: 'hint', text: 'Lo usiamo solo per leggere il tuo rank da OpenDota. Viene salvato su questo PC e non verrà chiesto di nuovo.' }),
+      err
     ]);
+    return { form: form, button: btn, input: input };
+  }
+
+  function screenSection() {
+    if (!hasScreen()) return null;
+    var res = el('span', { class: 'sv', text: '—' }), cal = el('span', { class: 'sv', text: '—' });
+    var msg = el('div', { class: 'hint', role: 'status' });
+    function upd() {
+      if (!settings) return;
+      res.textContent = settings.resolution || '—';
+      cal.textContent = settings.regionsSource === 'utente' ? 'personalizzata' : 'predefinita';
+    }
+    settingsUpdaters.push(upd); upd();
+    return el('section', { class: 'sset', 'aria-labelledby': 'h-screen' }, [
+      el('h2', { id: 'h-screen', text: 'Schermo' }),
+      el('div', { class: 'kv' }, [el('span', { text: 'Risoluzione rilevata: ' }), res]),
+      el('div', { class: 'kv' }, [el('span', { text: 'Calibrazione: ' }), cal]),
+      el('button', { class: 'btn ghost', type: 'button', text: 'Calibra lo schermo', onclick: function () {
+        msg.textContent = 'Calibrazione avviata…';
+        try { Promise.resolve(api().startCalibration()).catch(function (e) { msg.textContent = 'Calibrazione non riuscita: ' + (e && e.message || e); }); } catch (e) { msg.textContent = 'Calibrazione non riuscita.'; }
+      } }),
+      el('div', { class: 'hint', text: 'Apri Dota 2 in finestra senza bordi ed entra in una draft (anche una partita contro bot), poi sistema i riquadri su ruolo ed eroi.' }),
+      msg
+    ]);
+  }
+
+  function stratzSection() {
+    if (!hasStratz()) return null;
+    var input = el('input', { id: 'stratz-tok', type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: 'Incolla il tuo token', 'aria-describedby': 'stratz-st stratz-help' });
+    var status = el('div', { id: 'stratz-st', class: 'stat-line', role: 'status' });
+    function upd() {
+      var z = settings && settings.stratz;
+      status.className = 'stat-line';
+      if (!z || !z.configured) { status.textContent = 'Stato: non impostata'; }
+      else if (z.ok === false || z.error) { status.textContent = 'Stato: errore' + (z.error ? ' — ' + z.error : ''); status.classList.add('bad'); }
+      else { status.textContent = 'Stato: attiva'; status.classList.add('good'); }
+    }
+    settingsUpdaters.push(upd); upd();
+    var show = el('button', { class: 'btn ghost small', type: 'button', 'aria-pressed': 'false', text: 'Mostra', onclick: function () {
+      var vis = input.type === 'password'; input.type = vis ? 'text' : 'password';
+      show.textContent = vis ? 'Nascondi' : 'Mostra'; show.setAttribute('aria-pressed', String(vis));
+    } });
+    function save(tok, okMsg) {
+      Promise.resolve(api().saveStratzToken(tok)).then(function (r) {
+        if (r && r.ok === false) { status.className = 'stat-line bad'; status.textContent = 'Stato: errore — ' + (r.error || 'token non valido'); return; }
+        if (!tok) input.value = '';
+        refreshSettings();
+      }).catch(function (e) { status.className = 'stat-line bad'; status.textContent = 'Stato: errore — ' + (e && e.message || e); });
+    }
+    input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); save(input.value.trim()); } });
+    return el('section', { class: 'sset', 'aria-labelledby': 'h-stratz' }, [
+      el('h2', { id: 'h-stratz', text: 'Chiave STRATZ (facoltativa)' }),
+      el('label', { for: 'stratz-tok', class: 'sr-only', text: 'Token STRATZ' }),
+      el('div', { class: 'tokrow' }, [input, show]),
+      el('div', { class: 'btnrow' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Salva chiave', onclick: function () { var t = input.value.trim(); if (t) save(t); else status.textContent = 'Incolla prima il token.'; } }),
+        el('button', { class: 'btn ghost small', type: 'button', text: 'Rimuovi', onclick: function () { save(''); } })
+      ]),
+      status,
+      el('div', { id: 'stratz-help', class: 'hint' }, ['Migliora sinergie e counter. È gratuita: crea un account su stratz.com, vai su ', el('a', { href: 'https://stratz.com/api', target: '_blank', rel: 'noopener noreferrer', text: 'stratz.com/api' }), ' e copia il tuo token. Resta salvata solo su questo PC.'])
+    ]);
+  }
+
+  function renderSetup() {
+    settingsUpdaters = [];
+    var sf = steamFields('setup-form');
+    var screenS = screenSection(), stratzS = stratzSection();
     app.replaceChildren(el('div', { class: 'center' }, [
       el('h1', { text: 'Dota Picker' }),
       el('p', { text: 'Il miglior pick, direttamente in draft.' }),
-      form
+      el('div', { class: 'card' }, [sf.form, screenS, stratzS, sf.button])
     ]));
-    input.focus();
+    sf.input.focus();
+    refreshSettings();
   }
 
+  /* Pannello impostazioni (ingranaggio): sopra la schermata corrente, che resta intatta sotto. */
+  var panel = null, gear = null, lastFocus = null;
+  function closeSettings() {
+    if (!panel) return;
+    panel.remove(); panel = null; settingsUpdaters = [];
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  function openSettings() {
+    if (panel) return;
+    lastFocus = document.activeElement;
+    settingsUpdaters = [];
+    var sf = steamFields('panel-form', function () { closeSettings(); });
+    sf.button.textContent = 'Salva Steam ID';
+    var closeB = el('button', { class: 'btn ghost small', type: 'button', text: 'Chiudi', onclick: closeSettings });
+    panel = el('div', { class: 'settings-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'h-set' }, [
+      el('div', { class: 'column sp-col' }, [
+        el('h1', { id: 'h-set', class: 'sp-title', text: 'Impostazioni' }),
+        el('div', { class: 'card' }, [sf.form, sf.button]),
+        el('div', { class: 'card' }, [screenSection(), stratzSection()]),
+        closeB
+      ])
+    ]);
+    panel.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closeSettings(); } });
+    document.body.appendChild(panel);
+    closeB.focus();
+    refreshSettings();
+  }
+  function updateGear() {
+    var show = state && state.status !== 'setup' && !(state.status !== 'error' && !state.steamId);
+    if (!gear) {
+      gear = el('button', { id: 'gear-btn', class: 'gear-btn', type: 'button', 'aria-label': 'Impostazioni', title: 'Impostazioni', onclick: openSettings }, []);
+      gear.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+      document.body.appendChild(gear);
+    }
+    gear.hidden = !show;
+  }
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && panel) closeSettings(); });
+  if (typeof api().onSettings === 'function') api().onSettings(function (v) { settings = v; settingsUpdaters.forEach(function (f) { f(); }); });
   function renderWaiting(s) {
     app.replaceChildren(el('div', { class: 'center' }, [
       el('div', { class: 'pulse', 'aria-hidden': 'true' }),
@@ -141,7 +260,7 @@
         el('div', { class: 'stat' }, [el('small', { text: 'Counter' }), el('b', { class: cls(delta(p.counter)), text: signedDelta(p.counter) })]),
         el('div', { class: 'stat' }, [el('small', { text: 'Sinergia' }), el('b', { class: cls(delta(p.synergy)), text: signedDelta(p.synergy) })])
       ]),
-      (p.reasons && p.reasons.length) ? el('ul', { class: 'reasons', 'aria-label': 'Perche’' }, p.reasons.map(function (r) { return el('li', { text: r }); })) : null,
+      (p.reasons && p.reasons.length) ? el('ul', { class: 'reasons', 'aria-label': 'Perché' }, p.reasons.map(function (r) { return el('li', { text: r }); })) : null,
       pickBtn(p)
     ]);
   }
@@ -371,6 +490,7 @@
     else if (s.status === 'waiting') renderWaiting(s);
     else if (s.status === 'error') renderError(s);
     else renderDraft(s);
+    updateGear();
     mockBar();
   }
   function apply(s, force) {

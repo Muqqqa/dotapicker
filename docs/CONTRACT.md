@@ -37,6 +37,12 @@ Se i dati non sono ancora caricati, `suggest` lancia un errore chiaro. Fornire a
 api.getState()  // Promise<State>
 api.onState(cb) // cb(State) a ogni cambio
 api.saveSteamId(id)
+api.getSettings() // Promise<{ steamId, rankTier, resolution:'2560x1440', scaleFactor, regionsSource:'preset'|'utente',
+                  //                stratz:{ configured:bool, ok:bool|null, error:string|null } }>
+api.onSettings(cb) // cb(settings) quando cambiano (salvataggio calibrazione o chiave STRATZ, esito della prova)
+api.saveStratzToken(token) // Promise<{ok, error?}>; '' = rimuove; cifrata con safeStorage (rifiutata se non disponibile), mai in chiaro
+api.startCalibration() // apre la finestra di calibrazione (anche F10); regioni salvate in userData/regions.json per risoluzione
+api.setRole(r) // override manuale del ruolo 1..5
 // State = { steamId:string|null, rankTier:number|null, lobbyRankTier:number|null, role:1..5|null,
 //           allies:[{heroId,name,img}], enemies:[{heroId,name,img}], myHero:{heroId,name,img}|null,
 //           suggestion: <output di suggest>|null, status:'setup'|'waiting'|'draft'|'error', message?:string,

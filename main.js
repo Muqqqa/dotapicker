@@ -1,11 +1,15 @@
 'use strict';
 const path = require('path');
-const { app, BrowserWindow, globalShortcut, ipcMain, screen, desktopCapturer, nativeImage } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, screen, desktopCapturer, nativeImage, safeStorage, shell } = require('electron');
+const ALLOWED_HOSTS = ['stratz.com'];
 const { Store } = require('./src/main/store');
 const { Controller } = require('./src/main/controller');
+const { createCalibration } = require('./src/calibrate');
 
 const SHOW_KEY = 'F8';
 const CLICK_KEY = 'F9';
+const CALIBRATE_KEY = 'F10';
+let calibration = null;
 const OVERLAY_WIDTH = 480;
 
 let win = null;
@@ -41,6 +45,16 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true);
+  // link esterni: solo https verso host consentiti, nel browser di sistema; mai nuove finestre Electron
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      const ok = u.protocol === 'https:' && ALLOWED_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith('.' + h));
+      if (ok) shell.openExternal(u.toString()).catch(() => {});
+    } catch (e) { /* URL non valido: ignora */ }
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) e.preventDefault(); });
   // esclude l'overlay dallo screen capture, cosi' l'OCR non vede l'overlay stesso
   try { win.setContentProtection(true); } catch (e) { /* non supportato */ }
   clickThrough = !!store.get('clickThrough', false);
@@ -73,9 +87,20 @@ if (!gotLock) {
     controller = new Controller({
       store,
       userDataDir: app.getPath('userData'),
-      desktopCapturer, screen, nativeImage,
+      desktopCapturer, screen, nativeImage, safeStorage,
       emit: (s) => { if (win && !win.isDestroyed()) win.webContents.send('state', s); },
+      emitSettings: (s) => { if (win && !win.isDestroyed()) win.webContents.send('settings', s); },
     });
+
+    let overlayWasVisible = false;
+    calibration = createCalibration({
+      BrowserWindow, ipcMain, screen, controller,
+      onOpen: () => { overlayWasVisible = !!(win && !win.isDestroyed() && win.isVisible()); if (overlayWasVisible) win.hide(); },
+      onClose: () => { if (overlayWasVisible && win && !win.isDestroyed()) win.showInactive(); },
+    });
+    ipcMain.handle('settings:get', () => controller.getSettings());
+    ipcMain.handle('stratz:save', (_e, t) => controller.saveStratzToken(t));
+    ipcMain.handle('cal:start', () => calibration.open());
 
     ipcMain.handle('state:get', () => controller.getState());
     ipcMain.handle('steam:save', (_e, id) => controller.saveSteamId(id));
@@ -87,6 +112,7 @@ if (!gotLock) {
     createWindow();
     if (!globalShortcut.register(SHOW_KEY, toggleVisible)) console.warn('[main] scorciatoia ' + SHOW_KEY + ' non registrata');
     globalShortcut.register(CLICK_KEY, () => toggleClickThrough());
+    globalShortcut.register(CALIBRATE_KEY, () => { if (calibration.isOpen()) calibration.close(); else calibration.open(); });
     // gli eventi di stato partono dopo il caricamento del renderer
     win.webContents.once('did-finish-load', () => controller.start(1500));
   });

@@ -1,7 +1,7 @@
 {
   "name": "dota-picker-overlay",
   "productName": "Dota Picker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Overlay Dota 2 per suggerimenti di pick in draft",
   "author": "Muqqqa",
   "main": "main.js",

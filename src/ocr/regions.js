@@ -1,32 +1,40 @@
 'use strict';
+// I/O delle regioni: preset (regions.default.json, dentro asar va bene: require) + calibrazioni utente
+// in <userData>/regions.json con chiave per risoluzione ('2560x1440@1').
 const fs = require('fs');
 const path = require('path');
+const layout = require('./layout');
 
 const DEFAULTS = require('./regions.default.json');
+const FILE = 'regions.json';
 
-/** Carica config: default + eventuale override <userDir>/regions.json (merge superficiale). */
-function loadRegions(userDir) {
-  let cfg = { ...DEFAULTS };
-  if (userDir) {
-    try {
-      const o = JSON.parse(fs.readFileSync(path.join(userDir, 'regions.json'), 'utf8'));
-      cfg = { ...cfg, ...o };
-    } catch (e) { /* nessun override */ }
-  }
-  return cfg;
+function readAll(userDir) {
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(userDir, FILE), 'utf8'));
+    return o && typeof o === 'object' ? o : {};
+  } catch (e) { return {}; }
 }
 
-/** Scala un rect [x,y,w,h] dal sistema di riferimento alla risoluzione reale, con clamp. */
-function scaleRect(rect, cfg, width, height) {
-  const sx = width / cfg.baseWidth;
-  const sy = height / cfg.baseHeight;
-  let x = Math.round(rect[0] * sx), y = Math.round(rect[1] * sy);
-  let w = Math.max(1, Math.round(rect[2] * sx)), h = Math.max(1, Math.round(rect[3] * sy));
-  x = Math.min(Math.max(0, x), Math.max(0, width - 1));
-  y = Math.min(Math.max(0, y), Math.max(0, height - 1));
-  w = Math.min(w, width - x);
-  h = Math.min(h, height - y);
-  return { x, y, width: w, height: h };
+function loadUserRegions(userDir, key) {
+  if (!userDir) return null;
+  const all = readAll(userDir);
+  return /^\d+x\d+@/.test(key) && all[key] && typeof all[key] === 'object' ? all[key] : null;
 }
 
-module.exports = { loadRegions, scaleRect, DEFAULTS };
+/** regions = oggetto id->rect, oppure null per rimuovere la calibrazione di quella risoluzione. */
+function saveUserRegions(userDir, key, regions) {
+  const all = readAll(userDir);
+  if (regions) all[key] = regions; else delete all[key];
+  fs.mkdirSync(userDir, { recursive: true });
+  fs.writeFileSync(path.join(userDir, FILE), JSON.stringify(all, null, 2), 'utf8');
+}
+
+/** Risolve le regioni per il display (size in DIP + scaleFactor). */
+function resolveForDisplay(userDir, display) {
+  const width = display.size.width, height = display.size.height, scaleFactor = display.scaleFactor || 1;
+  const key = layout.resolutionKey(width, height, scaleFactor);
+  const r = layout.resolveRegions({ defaults: DEFAULTS, user: loadUserRegions(userDir, key), width, height, scaleFactor });
+  return { ...r, width, height, scaleFactor, matchThreshold: DEFAULTS.matchThreshold };
+}
+
+module.exports = { DEFAULTS, loadUserRegions, saveUserRegions, resolveForDisplay };

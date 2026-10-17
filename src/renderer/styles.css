@@ -205,3 +205,22 @@ button{cursor:pointer}
 .pick-btn:hover,.pick-btn:focus-visible{background:var(--amber);color:#0b0f14}
 .calt-pick{padding:0 10px 10px}
 .calt-pick .pick-btn{margin-top:0}
+
+/* impostazioni */
+.card .sfields{display:flex;flex-direction:column;gap:10px}
+.sset{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.sset h2{font-size:15px}
+.kv{font-size:14px;color:var(--muted)} .kv .sv{color:var(--text);font-weight:600}
+.btn.small{min-height:44px;font-size:16px;padding:0 14px}
+.tokrow{display:flex;gap:8px} .tokrow input{flex:1;min-width:0}
+.card .tokrow input{min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:0 12px;font-size:16px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.stat-line{font-size:14px;color:var(--muted)} .stat-line.good{color:var(--green)} .stat-line.bad{color:var(--red)}
+.card a{color:var(--amber)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.gear-btn{position:fixed;top:8px;right:56px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:8px;color:var(--muted);z-index:10}
+.gear-btn:hover,.gear-btn:focus-visible{color:var(--amber);border-color:var(--line)}
+.gear-btn[hidden]{display:none}
+.settings-panel{position:fixed;inset:0;display:flex;justify-content:flex-end;z-index:20;pointer-events:none}
+.settings-panel .sp-col{pointer-events:auto;padding-top:56px;gap:14px;border-left:1px solid var(--amber)}
+.sp-title{font-size:26px;color:var(--amber)}

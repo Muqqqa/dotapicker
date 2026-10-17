@@ -31,7 +31,7 @@
     ]
   };
   suggestion.top.covers = ['disable'];
-  suggestion.teamNeeds[0].fix = { hero: { heroId: 27, name: 'Shadow Shaman', img: CDN + 'shadow_shaman.png', expectedWinrate: 52.6, winrateGap: 0 }, items: null, text: 'Shadow Shaman e’ gia’ tra i consigli.' };
+  suggestion.teamNeeds[0].fix = { hero: { heroId: 27, name: 'Shadow Shaman', img: CDN + 'shadow_shaman.png', expectedWinrate: 52.6, winrateGap: 0 }, items: null, text: 'Shadow Shaman è già tra i consigli.' };
   suggestion.teamNeeds[2].fix = { hero: { heroId: 22, name: 'Zeus', img: CDN + 'zeus.png', expectedWinrate: 49.6, winrateGap: 2.8 }, items: 'Kaya, Veil of Discord', text: 'Danno magico da Zeus.' };
   suggestion.teamNeeds[3].fix = { hero: null, items: 'Mjollnir, Battle Fury', text: 'Nessun eroe vale il push: compra gli oggetti.' };
   suggestion.wildcard = { heroId: 8, name: 'Juggernaut', img: CDN + 'juggernaut.png', needKey: 'push', needLabel: 'Push', needKeys: ['push', 'healing', 'magicres'], needLabels: ['Push', 'Cura', 'Resistenza magica'],
@@ -74,6 +74,7 @@
     heroId: null, name: null, img: null, needKey: 'detection', needLabel: 'Detection', expectedWinrate: null, winrateGap: null, items: ['Dust of Appearance'],
     text: 'Nessun eroe vale il sacrificio di winrate: compra Dust e Sentry in squadra.', teamOnly: true }) });
 
+  var mockSettings = { steamId: null, rankTier: null, resolution: '2560x1440', scaleFactor: 1.25, regionsSource: 'preset', stratz: { configured: false, ok: null, error: null } }, setCbs = [];
   var embed = /[?&]embed=1\b/.test(location.search);
   var cur = 'setup', cbs = [];
   if (embed) {
@@ -101,9 +102,19 @@
     getState: function () { return Promise.resolve(state()); },
     onState: function (cb) { cbs.push(cb); },
     saveSteamId: function (id) {
-      variants.setup.steamId = id; variants.waiting.steamId = id; cur = 'waiting'; emit(); return Promise.resolve({ ok: true });
+      variants.setup.steamId = id; variants.waiting.steamId = id; if (cur === 'setup') { cur = 'waiting'; emit(); } return Promise.resolve({ ok: true });
     },
-    setRole: function (r) { variants[cur].role = r; return Promise.resolve(); }
+    setRole: function (r) { variants[cur].role = r; return Promise.resolve(); },
+    getSettings: function () { return Promise.resolve(JSON.parse(JSON.stringify(mockSettings))); },
+    onSettings: function (cb) { setCbs.push(cb); },
+    saveStratzToken: function (t) {
+      mockSettings.stratz = t ? (t === 'bad' ? { configured: true, ok: false, error: 'token rifiutato da STRATZ' } : { configured: true, ok: true, error: null }) : { configured: false, ok: null, error: null };
+      setCbs.forEach(function (f) { f(JSON.parse(JSON.stringify(mockSettings))); }); return Promise.resolve({ ok: true });
+    },
+    startCalibration: function () {
+      mockSettings.regionsSource = 'utente';
+      setCbs.forEach(function (f) { f(JSON.parse(JSON.stringify(mockSettings))); }); return Promise.resolve({ ok: true });
+    }
   };
   window.__mock = { screens: Object.keys(variants), go: function (k) { cur = k; emit(); }, current: function () { return cur; } };
 })();

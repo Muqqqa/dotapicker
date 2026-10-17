@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+<title>Calibrazione</title>
+<link rel="stylesheet" href="calibrate.css">
+</head>
+<body>
+<div id="stage"></div>
+<div id="bar" role="toolbar" aria-label="Comandi calibrazione">
+  <div id="grip" title="Trascina per spostare la barra" aria-label="Sposta la barra"></div>
+  <div id="hint">Trascina i riquadri, ridimensiona dalle maniglie. Frecce: sposta. Maiusc+frecce: ridimensiona. Tab: cambia riquadro. Esc: annulla.</div>
+  <div id="info"></div>
+  <div class="btns">
+    <button id="save" type="button" class="primary">Salva</button>
+    <button id="test" type="button">Prova lettura</button>
+    <button id="reset" type="button">Ripristina predefiniti</button>
+    <button id="cancel" type="button">Annulla</button>
+  </div>
+  <div id="result" aria-live="polite"></div>
+</div>
+<script src="calibrate.js"></script>
+</body>
+</html>

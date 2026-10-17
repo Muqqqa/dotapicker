@@ -1,23 +1,21 @@
 {
-  "_doc": "Rettangoli [x,y,w,h] in pixel su schermo di riferimento baseWidth x baseHeight. Valori di DEFAULT APPROSSIMATIVI: calibrali copiando questo file in <userData>/regions.json e modificandolo (la scalatura per altre risoluzioni e' automatica).",
+  "_stime": "STIME da calibrare, non misure. Alleati e nemici sono specchiati attorno a x = baseWidth/2 (alleato i: x, nemico i: baseWidth - x - w), stessa larghezza, tutti dentro lo schermo; myHero e roleText stanno sopra il bordo basso.",
+  "_doc": "Regioni [x,y,w,h,ancora] sul layout di riferimento baseWidth x baseHeight (16:9). Valori di DEFAULT APPROSSIMATIVI: calibrali con la modalita' calibrazione (F10). Ancora: 'top' = attaccata al bordo alto, 'center' = relativa al centro verticale, 'bottom' = al bordo basso. Su altre proporzioni l'HUD di Dota scala in modo uniforme (min(W/baseW, H/baseH)) restando centrato in orizzontale: vedi layout.js.",
   "baseWidth": 1920,
   "baseHeight": 1080,
-  "userSide": "left",
-  "left": [
-    [330, 14, 96, 54],
-    [432, 14, 96, 54],
-    [534, 14, 96, 54],
-    [636, 14, 96, 54],
-    [738, 14, 96, 54]
-  ],
-  "right": [
-    [1086, 14, 96, 54],
-    [1188, 14, 96, 54],
-    [1290, 14, 96, 54],
-    [1392, 14, 96, 54],
-    [1494, 14, 96, 54]
-  ],
-  "myHero": [834, 780, 140, 80],
-  "roleText": [740, 700, 440, 60],
-  "matchThreshold": 0.55
+  "matchThreshold": 0.55,
+  "regions": {
+    "roleText": [740, 700, 440, 60, "center"],
+    "myHero": [834, 780, 140, 80, "center"],
+    "ally1": [330, 14, 96, 54, "top"],
+    "ally2": [432, 14, 96, 54, "top"],
+    "ally3": [534, 14, 96, 54, "top"],
+    "ally4": [636, 14, 96, 54, "top"],
+    "ally5": [738, 14, 96, 54, "top"],
+    "enemy1": [1086, 14, 96, 54, "top"],
+    "enemy2": [1188, 14, 96, 54, "top"],
+    "enemy3": [1290, 14, 96, 54, "top"],
+    "enemy4": [1392, 14, 96, 54, "top"],
+    "enemy5": [1494, 14, 96, 54, "top"]
+  }
 }

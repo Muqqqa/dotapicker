@@ -15,7 +15,15 @@ class RoleOcr {
   async _init() {
     const { createWorker } = require('tesseract.js');
     fs.mkdirSync(this.cacheDir, { recursive: true });
-    this.worker = await createWorker('eng+ita', 1, { cachePath: this.cacheDir, logger: () => {} });
+    const opts = { cachePath: this.cacheDir, logger: () => {} };
+    try {
+      // dentro asar il worker_thread deve partire dalla copia estratta (asarUnpack)
+      const wp = require.resolve('tesseract.js/src/worker-script/node/index.js');
+      if (wp.includes('app.asar' + path.sep) || wp.includes('app.asar/')) {
+        opts.workerPath = wp.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+      }
+    } catch (e) { /* default */ }
+    this.worker = await createWorker('eng+ita', 1, opts);
     try {
       await this.worker.setParameters({ tessedit_pageseg_mode: '7' }); // singola riga
     } catch (e) { /* non bloccante */ }

@@ -2,7 +2,9 @@
 const path = require('path');
 const { fetchRankTier, fetchHeroes } = require('./opendota');
 const { lobbyRankTier } = require('./rank');
-const { loadRegions, scaleRect } = require('../ocr/regions');
+const regionsIo = require('../ocr/regions');
+const layout = require('../ocr/layout');
+const { StratzKey, probe: probeStratz } = require('./stratz');
 const { HeroMatcher } = require('../ocr/heroMatch');
 const { RoleOcr } = require('../ocr/roleOcr');
 const { majorityRole } = require('../ocr/parseRole');
@@ -15,8 +17,13 @@ const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react
  * Tutto difensivo: ogni errore diventa status 'waiting'/'error' con messaggio, mai un crash.
  */
 class Controller {
-  constructor({ store, userDataDir, desktopCapturer, screen, nativeImage, emit, enginePath }) {
+  constructor({ store, userDataDir, desktopCapturer, screen, nativeImage, emit, emitSettings, safeStorage, enginePath }) {
     this.store = store;
+    this.emitSettings = emitSettings || (() => {});
+    this.stratzKey = new StratzKey(userDataDir, safeStorage);
+    this.userStratzToken = this.stratzKey.load(); // solo in memoria
+    this.stratzStatus = { ok: null, error: null };
+    this.regionsInfo = null;
     this.userDataDir = userDataDir;
     this.desktopCapturer = desktopCapturer;
     this.screen = screen;
@@ -116,7 +123,10 @@ class Controller {
     }
     this.engineLoading = true;
     try {
-      await eng.loadData({ rankTier });
+      // precedenza: chiave dell'utente > env STRATZ_TOKEN (gestita dall'engine quando stratzToken e' assente)
+      const o = { rankTier, cacheDir: path.join(this.userDataDir, 'engine-cache') };
+      if (this.userStratzToken) o.stratzToken = this.userStratzToken;
+      await eng.loadData(o);
       this.engineLoadedFor = rankTier;
       this.engineErr = null;
       return true;
@@ -201,23 +211,31 @@ class Controller {
     return img && !img.isEmpty() ? img : null;
   }
 
-  crop(img, rect) {
-    const { width, height } = img.getSize();
-    return img.crop(scaleRect(rect, this.regions, width, height));
+  /** Ricalcola le regioni per il display principale (preset o calibrazione utente). */
+  refreshRegions() {
+    this.regionsInfo = regionsIo.resolveForDisplay(this.userDataDir, this.screen.getPrimaryDisplay());
+    return this.regionsInfo;
   }
 
-  async detect(img) {
-    const cfg = this.regions;
-    const thr = cfg.matchThreshold;
-    const ident = (r) => (this.matcher ? this.matcher.identify(this.crop(img, r), thr) : null);
-    const leftIds = cfg.left.map(ident);
-    const rightIds = cfg.right.map(ident);
-    const myId = cfg.myHero ? ident(cfg.myHero) : null;
-    const [alliesIds, enemiesIds] = cfg.userSide === 'right' ? [rightIds, leftIds] : [leftIds, rightIds];
+  /** rect in DIP -> ritaglio dell'immagine catturata. */
+  crop(img, rect, info) {
+    const ri = info || this.regionsInfo || this.refreshRegions();
+    const { width, height } = img.getSize();
+    return img.crop(layout.toPixelRect(rect, ri.width, ri.height, width, height));
+  }
+
+  async detect(img, regions) {
+    const ri = this.regionsInfo || this.refreshRegions();
+    const R = regions || ri.regions;
+    const thr = ri.matchThreshold;
+    const ident = (id) => (this.matcher && R[id] ? this.matcher.identify(this.crop(img, R[id], ri), thr) : null);
+    const alliesIds = layout.ALLY_IDS.map(ident);
+    const enemiesIds = layout.ENEMY_IDS.map(ident);
+    const myId = ident('myHero');
 
     let role = null;
     try {
-      const r = await this.ocr.readRole(this.crop(img, cfg.roleText));
+      const r = await this.ocr.readRole(this.crop(img, R.roleText, ri));
       this.roleHist.push(r.role);
       if (this.roleHist.length > 5) this.roleHist.shift();
       role = majorityRole(this.roleHist);
@@ -235,12 +253,11 @@ class Controller {
     this.busy = true;
     try {
       if (!this.state.steamId) { this.set({ status: 'setup', message: 'Inserisci il tuo Steam ID' }); return; }
-      if (!this.regions) this.regions = loadRegions(this.userDataDir);
-
       const userRank = await this.ensureRank();
       if (!userRank) return;
       await this.ensureHeroes();
       await this.ensureMatcher();
+      this.refreshRegions();
 
       let det = { alliesIds: [], enemiesIds: [], myId: null, role: null };
       try {
@@ -328,9 +345,96 @@ class Controller {
     }
   }
 
+  // ---- impostazioni / STRATZ / calibrazione -----------------------------------
+  getSettings() {
+    let ri;
+    try { ri = this.refreshRegions(); } catch (e) { ri = null; }
+    const configured = !!(this.userStratzToken || process.env.STRATZ_TOKEN);
+    return {
+      steamId: this.state.steamId,
+      rankTier: this.state.rankTier,
+      resolution: ri ? `${ri.width}x${ri.height}` : null,
+      scaleFactor: ri ? ri.scaleFactor : null,
+      regionsSource: ri ? ri.source : 'preset',
+      stratz: { configured, ok: configured ? this.stratzStatus.ok : null, error: configured ? this.stratzStatus.error : null },
+    };
+  }
+
+  pushSettings() {
+    try { this.emitSettings(this.getSettings()); } catch (e) { /* ignore */ }
+  }
+
+  async checkStratz() {
+    const tok = this.userStratzToken || process.env.STRATZ_TOKEN;
+    if (!tok) { this.stratzStatus = { ok: null, error: null }; this.pushSettings(); return; }
+    this.stratzStatus = { ok: null, error: null };
+    this.pushSettings();
+    const r = await probeStratz(tok);
+    this.stratzStatus = { ok: r.ok, error: r.error || null };
+    this.pushSettings();
+  }
+
+  /** token '' = rimuovi. Mai il token in log/errori/State. */
+  async saveStratzToken(token) {
+    const r = this.stratzKey.save(token);
+    if (!r.ok) return { ok: false, error: r.error };
+    const t = String(token == null ? '' : token).trim();
+    this.userStratzToken = t || null;
+    this.engineLoadedFor = null; // forza loadData col nuovo token al prossimo giro
+    this.lastEngineTry = 0;
+    this.lastSig = '';
+    await this.checkStratz();
+    this.tick();
+    return { ok: true, stratz: this.getSettings().stratz };
+  }
+
+  saveCalibration(regions, useDefault) {
+    const d = this.screen.getPrimaryDisplay();
+    const key = layout.resolutionKey(d.size.width, d.size.height, d.scaleFactor || 1);
+    try {
+      if (useDefault) regionsIo.saveUserRegions(this.userDataDir, key, null);
+      else {
+        const clean = layout.sanitizeRegions(regions, d.size.width, d.size.height, null);
+        if (!clean) return { ok: false, error: 'Regioni non valide' };
+        regionsIo.saveUserRegions(this.userDataDir, key, clean);
+      }
+    } catch (e) { return { ok: false, error: 'Salvataggio non riuscito' }; }
+    this.refreshRegions();
+    this.lastSig = '';
+    this.pushSettings();
+    this.tick();
+    return { ok: true };
+  }
+
+  /** "Prova lettura": OCR del ruolo e riconoscimento di ogni slot con le regioni passate. */
+  async testRead(regions) {
+    const ri = this.refreshRegions();
+    const R = layout.sanitizeRegions(regions, ri.width, ri.height, ri.preset) || ri.regions;
+    const out = { role: null, roleText: '', slots: {}, notes: [] };
+    let img = null;
+    try { img = await this.capture(); } catch (e) { /* sotto */ }
+    if (!img) { out.error = 'Cattura dello schermo non riuscita'; return out; }
+    try {
+      const r = await this.ocr.readRole(this.crop(img, R.roleText, ri));
+      out.role = r.role;
+      out.roleText = String(r.text || '').trim().slice(0, 60);
+    } catch (e) { out.notes.push('OCR ruolo non disponibile: ' + String(e.message).slice(0, 80)); }
+    if (!this.matcher || !this.matcher.ready) {
+      out.notes.push('Icone eroi non ancora pronte: riprova tra poco');
+      await this.ensureHeroes(); await this.ensureMatcher();
+      return out;
+    }
+    for (const id of [...layout.ALLY_IDS, ...layout.ENEMY_IDS, 'myHero']) {
+      const hid = R[id] ? this.matcher.identify(this.crop(img, R[id], ri), ri.matchThreshold) : null;
+      out.slots[id] = hid ? { heroId: hid, name: this.wrap(hid).name } : null;
+    }
+    return out;
+  }
+
   start(intervalMs = 1500) {
     this.stop();
     this.tick();
+    this.checkStratz().catch(() => {});
     this.timer = setInterval(() => this.tick(), intervalMs);
   }
 
