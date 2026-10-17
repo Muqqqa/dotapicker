@@ -99,6 +99,69 @@ const ok = (name, fn) => Promise.resolve().then(fn).then(() => { n++; console.lo
     assert.throws(() => engine.suggest({ allies: [], enemies: [], role: 9 }), /role/);
   });
 
+  // excluded (ban / non disponibili): mai proposti in nessun elenco dell'output
+  const proposedIds = (r) => {
+    const ids = [];
+    if (r.top) ids.push(r.top.heroId);
+    for (const x of r.alternatives) ids.push(x.heroId);
+    for (const x of r.candidates || []) ids.push(x.heroId);
+    for (const x of r.all || []) ids.push(x.heroId);
+    for (const nd of r.teamNeeds) if (nd.fix && nd.fix.hero) ids.push(nd.fix.hero.heroId);
+    if (r.wildcard && r.wildcard.heroId != null) ids.push(r.wildcard.heroId);
+    return ids;
+  };
+  await ok('excluded: nessun eroe escluso compare in top/alternatives/candidates/fix/wildcard/all', () => {
+    const drafts = [
+      { allies: [], enemies: [], role: 1 },
+      { allies: [33, 5], enemies: [44, 74], role: 3 },
+      { allies: [1, 8, 2, 14], enemies: [17, 75, 41, 26, 11], role: 5 },
+    ];
+    for (const d of drafts) {
+      const base = engine.suggest({ ...d, rankTier: 54 }, { count: 10, includeAll: true });
+      // esclude i primi 6 suggeriti + uno a caso: si ripete come fa il controller
+      const ex = [base.top.heroId, ...base.alternatives.map((x) => x.heroId), base.all[base.all.length - 1].heroId];
+      const r = engine.suggest({ ...d, rankTier: 54, excluded: ex }, { count: 10, includeAll: true });
+      assert.ok(r.top, 'resta un top');
+      const bad = proposedIds(r).filter((id) => ex.includes(id));
+      assert.deepStrictEqual(bad, [], 'eroi esclusi proposti: ' + bad.join(','));
+      // accetta anche oggetti { heroId } e stringhe
+      const r2 = engine.suggest({ ...d, rankTier: 54, excluded: ex.map((id, i) => (i % 2 ? { heroId: id } : String(id))) }, { count: 10 });
+      assert.deepStrictEqual(proposedIds(r2).filter((id) => ex.includes(id)), []);
+    }
+  });
+
+  await ok('excluded: con tutti gli eroi esclusi top null + message, nessuna eccezione', () => {
+    const all = engine.getHeroes().map((h) => h.id);
+    const r = engine.suggest({ allies: [1], enemies: [2], role: 2, rankTier: 54, excluded: all }, { count: 10, includeAll: true });
+    assert.strictEqual(r.top, null);
+    assert.deepStrictEqual(r.alternatives, []);
+    assert.deepStrictEqual(r.candidates, []);
+    assert.strictEqual(r.wildcard, null);
+    assert.ok(typeof r.message === 'string' && /Nessun eroe disponibile/.test(r.message));
+    assert.ok(Array.isArray(r.teamNeeds));
+    // ne resta uno solo: e' il top, niente alternative
+    const one = all.filter((id) => id !== 1 && id !== 2)[0];
+    const r1 = engine.suggest({ allies: [1], enemies: [2], role: 2, rankTier: 54, excluded: all.filter((id) => id !== one) });
+    assert.strictEqual(r1.top.heroId, one);
+    assert.deepStrictEqual(r1.alternatives, []);
+    assert.strictEqual(r1.message, undefined);
+  });
+
+  await ok('count: candidates ordinati, coerenti con top/alternatives, output retrocompatibile', () => {
+    const d = { allies: [33], enemies: [44], role: 1, rankTier: 54 };
+    const plain = engine.suggest(d);
+    assert.strictEqual(plain.candidates, undefined, 'senza count nessun campo candidates');
+    const r = engine.suggest(d, { count: 10 });
+    assert.ok(r.candidates.length >= 6 && r.candidates.length <= 10, 'candidates limitati a count e al pool del ruolo');
+    assert.deepStrictEqual(r.candidates.slice(0, 6).map((x) => x.heroId), [plain.top, ...plain.alternatives].map((x) => x.heroId));
+    assert.deepStrictEqual(JSON.parse(JSON.stringify({ ...r, candidates: undefined })), JSON.parse(JSON.stringify(plain)), 'count non cambia il resto');
+    for (let i = 1; i < r.candidates.length; i++) assert.ok(r.candidates[i - 1].score >= r.candidates[i].score);
+    assert.strictEqual(new Set(r.candidates.map((x) => x.heroId)).size, r.candidates.length);
+    assert.ok(r.candidates.every((x) => x.reasons.length >= 1 && x.reasons.length <= 4));
+    assert.deepStrictEqual(engine.suggest(d, { count: 0 }).candidates, []);
+    assert.ok(engine.suggest(d, { count: 9999 }).candidates.length >= 6);
+  });
+
   await ok('rank diverso cambia il winrate usato', () => {
     const lo = engine.suggest({ allies: [], enemies: [], role: 1, rankTier: 11 });
     const hi = engine.suggest({ allies: [], enemies: [], role: 1, rankTier: 80 });

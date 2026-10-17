@@ -450,16 +450,20 @@ function suggest(input = {}, opts = {}) {
   const bracketName = BRACKET_NAMES[bracket - 1];
   // numero di alternative mostrate (default 5 => top + 5 = 6 suggerimenti)
   const altN = opts.alternatives == null ? DEFAULT_ALTERNATIVES : Math.max(0, Math.floor(Number(opts.alternatives)));
+  // count: quanti candidati ordinati esporre in `candidates` (controllo ban del controller); assente => nessun campo
+  const countN = opts.count == null ? null : Math.max(0, Math.floor(Number(opts.count)) || 0);
+  // excluded: bannati / non disponibili / incerti. Mai proposti in nessun elenco dell'output (top, alternatives, candidates, fix, wildcard, all).
+  const excluded = new Set(toIds(input.excluded));
   const taken = new Set([...allies, ...enemies]);
   const teamNeeds = computeNeeds(allies, enemies);
   const baseNeeds = teamNeeds.filter((n) => NEEDS.some((x) => x.key === n.key)).map((n) => ({ ...n, gap: 1 - n.level }));
   const mechNeeds = teamNeeds.filter((n) => MECH_NEEDS.some((x) => x.key === n.key)).map((n) => ({ ...n, gap: 1 - n.level }));
   const sumGap = baseNeeds.reduce((a, g) => a + g.gap, 0);
 
-  let pool = store.heroes.filter((h) => !taken.has(h.id));
+  let pool = store.heroes.filter((h) => !taken.has(h.id) && !excluded.has(h.id));
   const fitting = pool.filter((h) => roleFit(tagsOf(h.id), role) >= 0.5);
   if (fitting.length >= 1 + altN) pool = fitting;
-  if (!pool.length) throw new Error('Nessun eroe disponibile da suggerire.');
+  // pool vuoto (tutti scelti/esclusi): nessuna eccezione, top null + message (vedi README)
 
   const needWeightFactor = clamp(allies.length / 4, 0.15, 1);
   const meta = metaTable();
@@ -532,9 +536,10 @@ function suggest(input = {}, opts = {}) {
 
   picks.sort((a, b) => b.score - a.score);
   const shown = Math.min(1 + altN, picks.length);
+  const withReasons = Math.min(Math.max(shown, countN || 0), picks.length);
 
   // reasons solo per top e alternative: winrate atteso sempre in testa, poi le piu' rilevanti per impatto (max MAX_REASONS)
-  for (const p of picks.slice(0, shown)) {
+  for (const p of picks.slice(0, withReasons)) {
     const d = p._d;
     const wrBase = d.wr * 100;
     const head = (allies.length || enemies.length)
@@ -579,7 +584,9 @@ function suggest(input = {}, opts = {}) {
     if (!p.reasons.length) p.reasons = [`Winrate ${pc(p._d.wr * 100)}% al rank ${bracketName}`];
     delete p._d;
   }
-  const out = { top: picks[0], alternatives: picks.slice(1, shown), teamNeeds, wildcard };
+  const out = { top: picks[0] || null, alternatives: picks.slice(1, shown), teamNeeds, wildcard };
+  if (!picks.length) out.message = 'Nessun eroe disponibile da suggerire: tutti gli eroi sono già scelti, bannati o esclusi.';
+  if (countN !== null) out.candidates = picks.slice(0, countN);
   if (opts.includeAll) out.all = picks;
   return out;
 }

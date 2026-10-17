@@ -461,7 +461,10 @@
     kids.push(teamBlockPair(s));
     kids.push(roleBlock(s));
     var sg = s.suggestion;
-    if (!sg || !sg.top) {
+    if (sg && !sg.top && sg.message) {
+      // tutti i candidati esclusi (bannati / non disponibili): il motore spiega perche'
+      kids.push(el('div', { class: 'empty-box', role: 'status' }, [el('b', { text: 'Nessun eroe disponibile' }), String(sg.message)]));
+    } else if (!sg || !sg.top) {
       kids.push(el('div', { class: 'empty-box' }, [el('b', { text: 'Nessun suggerimento ancora' }), 'Servono almeno un alleato o un nemico scelto: il consiglio compare appena il draft prosegue.']));
     } else {
       kids.push(bestCard(sg.top, manualRole || s.role));

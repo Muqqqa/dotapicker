@@ -12,6 +12,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/playground/server.js"],
       "port": 5174
+    },
+    {
+      "name": "vision-bench",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/vision-bench/server.js"],
+      "port": 5175
     }
   ]
 }

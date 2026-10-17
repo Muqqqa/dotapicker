@@ -1,6 +1,6 @@
 # Bug / segnalazioni (tester)
 
-Nessun bug bloccante aperto. Segnalazioni minori:
+Nessun bug bloccante aperto. Aperto: B1 (bassa priorità). Note: B2, B3, B7. Chiusi: B4, B5, B6.
 
 ## B1 - parseRole non tollera confusioni di caratteri OCR (bassa priorita', owner: app-dev, src/ocr/parseRole.js)
 - Passi: `parseRole('P0s 2')`, `parseRole('Pos l')`, `parseRole('Pos I')`, `parseRole('Pos S')`.
@@ -13,3 +13,24 @@ Nessun bug bloccante aperto. Segnalazioni minori:
 
 ## B3 - Verifica visiva non eseguita (nota)
 - Il renderer mock carica senza errori e popola il DOM (11 immagini, 0 rotte al momento del check), ma non e' stato fatto confronto visivo con il design di riferimento ne' test dell'OCR su screenshot reali di Dota (regioni OCR di default da calibrare, come dichiarato da app-dev).
+
+## B4 - findHeroGrid/findTiles perdeva meta' della griglia su allpick-ban-esempio (CHIUSO, owner: app-dev, src/ocr/heroGrid.js)
+- Passi: `findTiles(decodePNG('tests/fixtures/allpick-ban-esempio.png'))`.
+- Visto nella prima versione: griglia {x:476,y:162,w:778,h:381}, 87 riquadri su 127: mancavano le colonne FOR 0-2, parte di INT e tutto UNI. Quegli eroi sarebbero risultati "non trovati" e quindi esclusi.
+- Corretto da app-dev nella stessa sessione: ora 127 riquadri, griglia {x:356,y:160,w:902,h:387}. Coperto da tests/heroGrid.test.js ("copre i 4 blocchi", "numero di riquadri").
+
+## B5 - Riquadro normale letto come 'unknown' (falso escluso) (CHIUSO, owner: app-dev, src/ocr/heroGrid.js)
+- Passi: su allpick-ban-esempio.png, `tileStatus(img, {x:974,y:420,width:35,height:62})` (Skywrath Mage, INT riga 5 col 4).
+- Atteso: 'available' (nessuna linea rossa, riquadro non scurito).
+- Ottenuto: 'unknown' (detail: mean 115, sd 43, sat 27, line 0.48): le ali dorate in diagonale alzano banLineScore. Il controller lo esclude "nel dubbio", quindi l'eroe sparisce dai consigli senza motivo.
+- Corretto da app-dev: banLineScore conta solo il rosso vero (R - max(G,B)) e vuole la linea su tutti e tre i terzi del riquadro. Ora Skywrath -> 'available'; il test "4 bannati, nessun falso escluso" in tests/heroGrid.test.js non e' piu' todo e passa.
+
+## B6 - OCR dei nomi (nota, CHIUSO)
+- All'inizio mancava node_modules (tesseract.js non installato); durante la sessione e' stato installato.
+- Il banco usa src/ocr/nameOcr.js (NameOcr, eng+ita) con i dati lingua in tools/vision-bench/.cache (scaricati al primo uso).
+- Verificato: su draft-allpick-dire l'OCR legge "Mooq'a#PE..." nello slot D1 e nulla negli slot dei bot (~0,4 s per 10 slot).
+  Test "catena reale" in tests/topbar.test.js (si salta da solo se tesseract o i dati lingua mancano: niente rete nei test).
+- Rumore innocuo nel log: tesseract stampa "failed to load ./ita.special-words".
+
+## B7 - Formato Rect non fissato nel contratto (nota, owner: lead / CONTRACT-v2)
+- app-dev usa `{x,y,width,height}` (come Electron); il contratto scrive solo "Rect". I test accettano entrambe le forme ({w,h} e {width,height}); controller e calibrazione (ui-designer) devono usare `width/height`.

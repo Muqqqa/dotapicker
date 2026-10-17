@@ -2,24 +2,73 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'">
 <title>Calibrazione</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="calibrate.css">
 </head>
 <body>
-<div id="stage"></div>
-<div id="bar" role="toolbar" aria-label="Comandi calibrazione">
-  <div id="grip" title="Trascina per spostare la barra" aria-label="Sposta la barra"></div>
-  <div id="hint">Trascina i riquadri, ridimensiona dalle maniglie. Frecce: sposta. Maiusc+frecce: ridimensiona. Tab: cambia riquadro. Esc: annulla.</div>
-  <div id="info"></div>
-  <div class="btns">
-    <button id="save" type="button" class="primary">Salva</button>
-    <button id="test" type="button">Prova lettura</button>
-    <button id="reset" type="button">Ripristina predefiniti</button>
-    <button id="cancel" type="button">Annulla</button>
+<div id="mockScreen" hidden></div>
+
+<div id="stage">
+  <div id="fTop" class="frame" hidden role="group" aria-label="Cornice barra eroi">
+    <span class="flabel"></span>
+    <div id="me" class="me" hidden><span class="melabel">Sei tu</span></div>
   </div>
-  <div id="result" aria-live="polite"></div>
+  <div id="fGrid" class="frame" hidden role="group" aria-label="Cornice griglia eroi">
+    <span class="flabel"></span>
+  </div>
 </div>
+
+<section id="panel" role="dialog" aria-modal="true" aria-labelledby="title" aria-describedby="sub">
+  <header id="grip">
+    <h1 id="title">Calibrazione automatica</h1>
+    <button id="close" type="button" class="icon" aria-label="Annulla e chiudi (Esc)" title="Annulla (Esc)">&times;</button>
+  </header>
+  <p id="sub">Entra nel draft: l'app trova da sola la barra degli eroi e il tuo nickname.</p>
+
+  <ol id="steps">
+    <li class="step" id="s1" data-state="wait">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="st-body"><span class="st-title">Barra degli eroi</span><span class="sr st-state"></span><span class="st-detail"></span></div>
+    </li>
+    <li class="step" id="s2" data-state="wait">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="st-body"><span class="st-title">Nickname</span><span class="sr st-state"></span><span class="st-detail"></span></div>
+    </li>
+    <li class="step" id="s3" data-state="wait">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="st-body"><span class="st-title">Squadra dedotta dal nickname</span><span class="sr st-state"></span><span class="st-detail"></span></div>
+    </li>
+  </ol>
+
+  <div id="outcome" class="outcome" hidden></div>
+
+  <div id="manual" class="manual" hidden>
+    <p id="manualLbl">Nickname non letto con sicurezza. Indica tu il tuo slot:</p>
+    <div class="slotpick" role="group" aria-labelledby="manualLbl">
+      <div class="side radiant" role="group" aria-label="Radiant, a sinistra"><span class="sidename" aria-hidden="true">Radiant</span><div class="row" id="pickR"></div></div>
+      <div class="side dire" role="group" aria-label="Dire, a destra"><span class="sidename" aria-hidden="true">Dire</span><div class="row" id="pickD"></div></div>
+    </div>
+  </div>
+
+  <p id="moveHint" class="hint" hidden>Trascina le due cornici o le loro maniglie. Da tastiera: Tab sceglie la cornice, frecce spostano, Maiusc+frecce ridimensionano, Ctrl per passi da 10.</p>
+
+  <div class="btns">
+    <button id="confirm" type="button" class="primary">Conferma</button>
+    <button id="redetect" type="button">Rileva di nuovo</button>
+    <button id="move" type="button" aria-pressed="false">Sposta la barra a mano</button>
+  </div>
+  <p id="msg" role="status" aria-live="polite"></p>
+  <footer>F10 apre questa schermata · la calibrazione viene salvata per risoluzione · Esc annulla</footer>
+</section>
+
+<div id="live" class="sr" aria-live="polite" aria-atomic="true"></div>
+<nav id="mockbar" hidden aria-label="Scenari mock"></nav>
+<script src="mock.js"></script>
 <script src="calibrate.js"></script>
 </body>
 </html>

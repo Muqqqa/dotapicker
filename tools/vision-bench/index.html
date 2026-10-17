@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco lettura schermo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="bench.css">
+</head>
+<body>
+<header class="top">
+  <h1>Banco prova lettura schermo</h1>
+  <p class="muted">Carica uno screenshot della draft: qui girano i moduli veri di <code>src/ocr</code> e si ricaricano da soli quando cambiano.</p>
+</header>
+
+<div id="modbar" class="modbar" role="status" aria-live="polite"></div>
+
+<main class="layout">
+  <section class="panel controls" aria-labelledby="h-in">
+    <h2 id="h-in">Immagine</h2>
+    <div id="drop" class="drop">
+      <p>Trascina qui uno screenshot<br><span class="muted">PNG, JPG o WebP, qualsiasi risoluzione</span></p>
+      <label class="btn" for="file">Sfoglia…</label>
+      <input id="file" type="file" accept="image/*" class="sr">
+    </div>
+    <div class="row">
+      <label for="fixture">Oppure scegli una fixture</label>
+      <select id="fixture"><option value="">Nessuna</option></select>
+    </div>
+
+    <h2>Giocatore</h2>
+    <div class="row">
+      <label for="nick">Il tuo nickname</label>
+      <input id="nick" type="text" autocomplete="off" spellcheck="false" placeholder="es. Mooq'a#PEPPE">
+      <p class="hint muted">Come su Steam: l'app lo prende da OpenDota.</p>
+    </div>
+
+    <details id="namesBox">
+      <summary>Nomi letti nella barra (puoi correggerli)</summary>
+      <p class="hint muted">Se l'OCR non è disponibile o sbaglia, scrivi qui il nome che vedi sotto uno slot: serve a provare il riconoscimento del nickname.</p>
+      <div id="names" class="names"></div>
+    </details>
+
+    <div class="row">
+      <label class="check"><input id="useOcr" type="checkbox" checked> Leggi i nomi con l'OCR</label>
+    </div>
+
+    <h2>Livelli</h2>
+    <div class="layers" role="group" aria-label="Livelli disegnati">
+      <label class="check"><input type="checkbox" data-layer="slots" checked> Slot della barra</label>
+      <label class="check"><input type="checkbox" data-layer="names" checked> Nomi letti</label>
+      <label class="check"><input type="checkbox" data-layer="grid" checked> Quadrante griglia</label>
+      <label class="check"><input type="checkbox" data-layer="tiles" checked> Stato dei riquadri</label>
+    </div>
+    <button id="run" class="btn primary" type="button">Analizza di nuovo</button>
+  </section>
+
+  <section class="panel stagewrap" aria-labelledby="h-stage">
+    <div class="stagehead">
+      <h2 id="h-stage">Risultato sull'immagine</h2>
+      <ul class="legend" aria-label="Legenda">
+        <li><span class="sw radiant"></span>Radiant</li>
+        <li><span class="sw dire"></span>Dire</li>
+        <li><span class="sw me"></span>Sei tu</li>
+        <li><span class="sw banned"></span>Bannato</li>
+        <li><span class="sw unavailable"></span>Non disponibile</li>
+        <li><span class="sw available"></span>Disponibile</li>
+        <li><span class="sw unknown"></span>Incerto</li>
+      </ul>
+    </div>
+    <div id="stage" class="stage" tabindex="-1">
+      <p id="empty" class="emptymsg muted">Nessuna immagine. Trascinane una qui o scegli una fixture.</p>
+      <div id="frame" class="frame" hidden>
+        <canvas id="img"></canvas>
+        <canvas id="ov" role="img" aria-label="Disegno del risultato sopra lo screenshot"></canvas>
+      </div>
+    </div>
+    <p class="hint muted">Trascina un rettangolo sull'immagine per controllare un singolo riquadro con <code>tileStatus</code>.</p>
+    <p id="tileOut" class="tileout" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="panel results" aria-labelledby="h-res">
+    <h2 id="h-res">Numeri</h2>
+    <div id="verdict" class="verdict" role="status" aria-live="polite">—</div>
+    <dl id="stats" class="stats"></dl>
+    <h2>Slot</h2>
+    <div class="tablewrap"><table id="slotTable" class="slots">
+      <caption class="sr">Slot della barra in alto</caption>
+      <thead><tr><th scope="col">Slot</th><th scope="col">Trovato</th><th scope="col">Nome letto</th><th scope="col">Somiglianza</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <h2>Note</h2>
+    <ul id="notes" class="notes"></ul>
+  </section>
+</main>
+<script src="bench.js"></script>
+</body>
+</html>

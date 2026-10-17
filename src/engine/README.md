@@ -7,7 +7,7 @@ CommonJS, zero dipendenze (usa `fetch` nativo di Node >= 18). Auto-check: `node 
   - `source`: `network | cache | stale-cache | sample`. Fallback automatico rete -> cache scaduta -> `sample-data.json`.
   - `offline:true` usa solo il sample (test). `cacheDir` consigliato: sottocartella di `userData` (default `~/.dota-picker-cache`).
   - `matchups`: `'lazy'` (default, prefetch in background, 3 richieste parallele) | `'all'` (attende) | `'none'`.
-- `suggest({ allies, enemies, role, rankTier })` (sincrona, lancia se i dati non sono caricati) -> `{ top, alternatives[5], teamNeeds, wildcard }`.
+- `suggest({ allies, enemies, role, rankTier, excluded }, { alternatives, count, includeAll })` (sincrona, lancia se i dati non sono caricati o `role` non valido) -> `{ top, alternatives[5], teamNeeds, wildcard, candidates?, message? }`.
   `allies/enemies` accettano id numerici (o oggetti con `heroId`). `role` 1..5 (null = nessun filtro).
   `Pick = { heroId, name, img, score 0-100, winrate (%), counter 0-100 (50 neutro), synergy 0-100 (50 neutro), reasons[], covers[] }`.
   `teamNeeds = [{ key, label, level 0..1, note: 'Mancante'|'Scarso'|'Coperto'|'Da definire' }]` con key `disable, initiation, magic, push, support, tank`.
@@ -44,6 +44,12 @@ CommonJS, zero dipendenze (usa `fetch` nativo di Node >= 18). Auto-check: `node 
 | >60 | 613 | 64,8% | 64,4% |
 
 - Lettura onesta: la draft spiega solo una parte del risultato (precisione ~57%, tipica dei soli eroi): conta soprattutto come giocate. Quasi tutto il segnale viene dal winrate base degli eroi al rank; i matchup 1-vs-1 e la sinergia euristica non migliorano le previsioni fuori campione (ablazione in `calibration.json`). Limiti: campione di 2104 partite (errore standard sull'accuratezza ~1,1 punti), winrate degli eroi calcolati su dati che includono in minima parte le stesse partite, calibrazione senza STRATZ (con STRATZ le sinergie possono pesare diversamente), vantaggio di lato ignorato (lato sconosciuto).
+
+## Eroi esclusi (ban) e candidati
+- `input.excluded: [heroId]` (id numerici, stringhe o oggetti `{ heroId }`): bannati, non disponibili o incerti. Sono tolti dal pool PRIMA del punteggio, quindi non compaiono MAI in `top`, `alternatives`, `candidates`, `teamNeeds[].fix.hero`, `wildcard` ne' `all`. Un eroe escluso puo' ancora essere un alleato/nemico in input (i nomi dei nemici restano nelle reasons e nelle minacce di `teamNeeds`, che non sono proposte).
+- Pool vuoto (tutto scelto/escluso): nessuna eccezione; `top: null`, `alternatives: []`, `wildcard: null`, `candidates: []` (se chiesto), `teamNeeds` valorizzato (fix senza eroe) e `message` (stringa in italiano da mostrare). `message` e' presente SOLO in questo caso. Se resta un solo eroe: e' il `top`, `alternatives` vuoto.
+- `opts.count: N`: aggiunge `candidates` = i primi N Pick ordinati per punteggio (stessa forma, reasons incluse; `candidates[0..5]` coincide con top + alternative). Limitato al pool del ruolo (eroi adatti al ruolo quando sono abbastanza), quindi puo' essere piu' corto di N. Senza `count` il campo non esiste e l'output e' identico a prima.
+- Uso tipico nel controller: `suggest({..., excluded }, { count: 12 })` -> verifica in griglia i `candidates` in ordine -> aggiungi a `excluded` quelli bannati/non disponibili/incerti -> richiama `suggest` con il nuovo `excluded` (cosi' top, alternative, fix e jolly sono ricalcolati senza di loro).
 
 ## Numero di suggerimenti
 `suggest(input, { alternatives: 5 })`: top + `alternatives` (default 5 => 6 suggerimenti, ordinati per punteggio; 0 o piu', configurabile). Tutte le regole "top 3" ragionano sui suggerimenti mostrati (top + alternative): il jolly e' fuori dai mostrati e scatta solo se nessuno di essi copre la lacuna; `fix.text` dice "già tra i consigli" se l'eroe e' fra i mostrati; reasons max 4 per pick. Con 6 mostrati il jolly con eroe e' molto raro (i 6 coprono gia' quasi tutto entro ~2,5 punti): il tetto `GEN_GAP` resta 2,5 (vedi sotto), il ramo `teamOnly` resta quello piu' frequente.

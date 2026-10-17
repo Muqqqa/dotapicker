@@ -55,6 +55,9 @@
   variants.fine = Object.assign({}, base, { allies: [h(2, 'Axe', 'axe'), h(18, 'Sven', 'sven'), h(129, 'Mars', 'mars'), h(5, 'Crystal Maiden', 'crystal_maiden'), h(26, 'Lion', 'lion')],
     enemies: [h(1, 'Anti-Mage', 'antimage'), h(8, 'Juggernaut', 'juggernaut'), h(74, 'Invoker', 'invoker'), h(14, 'Pudge', 'pudge'), h(22, 'Zeus', 'zuus')],
     matchEstimate: { winProbability: 54.2, low: 50.1, high: 58.3, confidence: 'media', factors: [{ text: 'Più controllo della squadra avversaria', impact: 2.1 }, { text: 'Sinergia Axe + Sven', impact: 1.2 }, { text: 'Nessuna detection contro Riki', impact: -0.8 }, { text: 'Rank lobby alto, dati scarsi', impact: -0.3 }], note: 'Stima indicativa basata sui winrate per rank; non tiene conto di abilità dei giocatori.' } });
+  /* Tutti i candidati esclusi per ban: il motore restituisce top:null + message */
+  variants.allBanned = Object.assign({}, base, { excluded: [2, 18, 129, 26, 27, 22], suggestion: { top: null, alternatives: [], teamNeeds: [],
+    message: 'Tutti gli eroi adatti al tuo ruolo risultano bannati o già scelti: scegli tra quelli rimasti nella griglia.' } });
   /* Schermate 'jolly': nemici invisibili, con jolly eroe e solo-squadra */
   var invisEnemies = [h(32, 'Riki', 'riki'), h(62, 'Bounty Hunter', 'bounty_hunter'), h(56, 'Clinkz', 'clinkz')];
   function jollySug(w) {

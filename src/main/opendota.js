@@ -24,8 +24,22 @@ async function fetchRankTier(steamIdInput) {
   return Number.isFinite(rt) && rt > 0 ? rt : null;
 }
 
+/**
+ * Profilo OpenDota: { rankTier:number|null, personaname:string|null }.
+ * personaname serve a trovare il proprio slot nella barra del draft. Lancia su errore di rete.
+ */
+async function fetchProfile(steamIdInput) {
+  const id = toAccountId(steamIdInput);
+  if (id == null) throw new Error('Steam ID non valido');
+  const p = await getJson(`${BASE}/players/${id}`);
+  const rt = p && p.rank_tier;
+  const prof = (p && p.profile) || {};
+  const name = typeof prof.personaname === 'string' ? prof.personaname.trim() : '';
+  return { rankTier: Number.isFinite(rt) && rt > 0 ? rt : null, personaname: name || null };
+}
+
 async function fetchHeroes() {
   return getJson(`${BASE}/heroes`);
 }
 
-module.exports = { fetchRankTier, fetchHeroes, getJson };
+module.exports = { fetchRankTier, fetchProfile, fetchHeroes, getJson };
