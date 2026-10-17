@@ -217,7 +217,8 @@ function computeTiles(img, area) {
 /** Area della griglia eroi (pixel) o null. */
 function findHeroGrid(rgba) {
   const t = findTiles(rgba);
-  return t && t.tiles.length >= 10 ? t.grid : null;
+  // riquadri alti almeno ~5.5% dello schermo: scarta icone di oggetti/abilita' e altre schermate
+  return t && t.tiles.length >= 30 && t.tileH >= rgba.height * 0.055 ? t.grid : null;
 }
 
 /**

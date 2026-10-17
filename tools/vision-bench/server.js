@@ -124,6 +124,31 @@ async function readNames(img, slots) {
   return { names, source: 'tesseract.js (eng)' };
 }
 
+// ---- identificazione eroi dai ritratti (src/ocr/heroMatch.js) ----
+// Usa le icone gia' in cache dall'app (%APPDATA%/Dota Picker/hero-icons/<id>.png + heroes.json), oppure DOTAPICKER_ICONS.
+// Il banco NON scarica nulla: senza cache l'eroe resta "n/d" e una nota lo spiega.
+const APP_DIR = process.env.DOTAPICKER_ICONS ? path.dirname(process.env.DOTAPICKER_ICONS) : path.join(process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming'), 'Dota Picker');
+const ICON_DIR = process.env.DOTAPICKER_ICONS || path.join(APP_DIR, 'hero-icons');
+let heroMatcher = null; // { mod, names, matcher } | { mod, error }
+async function getHeroMatcher() {
+  const file = path.join(OCR_DIR, 'heroMatch.js');
+  if (!fs.existsSync(file)) return { error: 'src/ocr/heroMatch.js: modulo non ancora disponibile' };
+  let mod; try { mod = require(file); } catch (e) { return { error: 'src/ocr/heroMatch.js non si carica: ' + e.message }; }
+  if (heroMatcher && heroMatcher.mod === mod) return heroMatcher;
+  heroMatcher = { mod };
+  try {
+    const list = JSON.parse(fs.readFileSync(path.join(APP_DIR, 'heroes.json'), 'utf8'));
+    const have = fs.existsSync(ICON_DIR) ? fs.readdirSync(ICON_DIR).filter((x) => /^\d+\.png$/.test(x)).length : 0;
+    if (!have) throw new Error('nessuna icona in ' + ICON_DIR);
+    heroMatcher.names = new Map(list.map((h) => [h.id, h.localized_name]));
+    const m = new mod.HeroMatcher({ cacheDir: ICON_DIR, heroes: list.map((h) => ({ id: h.id, name: h.name })), urlFor: () => 'https://invalid.invalid/offline.png' });
+    await m.init();
+    if (!m.ready) throw new Error('icone non leggibili');
+    heroMatcher.matcher = m;
+  } catch (e) { heroMatcher.error = 'riconoscimento eroi non disponibile (' + e.message + '): avvia l\'app una volta per scaricare le icone, o imposta DOTAPICKER_ICONS'; }
+  return heroMatcher;
+}
+
 // ---- analisi ----
 const rw = (r) => (r.width != null ? r.width : r.w);
 const rh = (r) => (r.height != null ? r.height : r.h);
@@ -159,6 +184,16 @@ async function analyze(img, { nick, manualNames, ocr }) {
         source = (source ? source + ' + ' : '') + 'correzioni a mano';
       }
       out.names = names; out.namesSource = source;
+      if (bar) {
+        const hm = await getHeroMatcher();
+        if (hm.matcher) {
+          const t1 = process.hrtime.bigint();
+          out.heroes = bar.slots.map((sl) => {
+            try { const r = hm.matcher.identifyPortrait(img, sl.portrait); return r ? { heroId: r.heroId, name: hm.names.get(r.heroId) || '#' + r.heroId, score: r.score, margin: r.margin } : null; } catch (e) { return null; }
+          });
+          out.heroesTimeMs = ms(t1);
+        } else out.notes.push(hm.error);
+      }
       if (nick) {
         t0 = process.hrtime.bigint();
         const match = tb.matchNickname(names, nick);

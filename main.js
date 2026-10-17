@@ -57,13 +57,29 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) e.preventDefault(); });
   // esclude l'overlay dallo screen capture, cosi' l'OCR non vede l'overlay stesso
   try { win.setContentProtection(true); } catch (e) { /* non supportato */ }
-  clickThrough = !!store.get('clickThrough', false);
+  // sempre cliccabile all'avvio: un click-through rimasto salvato da una sessione precedente renderebbe l'overlay
+  // muto (i clic passano a Dota) senza alcun segno visibile. F9 lo attiva solo per la sessione in corso.
+  clickThrough = false;
+  store.set('clickThrough', false);
   applyClickThrough();
   win.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html')).catch((e) => {
     console.error('[main] renderer non caricabile:', e.message);
   });
   win.once('ready-to-show', () => win.showInactive());
   win.on('closed', () => { win = null; });
+}
+
+// Chiusura a prova di blocco: se un worker OCR o un'attivita' in corso impedisce l'uscita, dopo 1,5 s si esce comunque.
+let quitting = false;
+function quitApp() {
+  if (quitting) return;
+  quitting = true;
+  try { globalShortcut.unregisterAll(); } catch (e) { /* ignore */ }
+  try { if (controller) controller.dispose().catch(() => {}); } catch (e) { /* ignore */ }
+  try { if (win && !win.isDestroyed()) win.hide(); } catch (e) { /* ignore */ }
+  app.quit();
+  const t = setTimeout(() => app.exit(0), 1500);
+  if (t.unref) t.unref();
 }
 
 function toggleVisible() {
@@ -107,7 +123,7 @@ if (!gotLock) {
     ipcMain.handle('role:set', (_e, r) => controller.setRole(Number(r)));
     ipcMain.handle('overlay:clickthrough', (_e, v) => toggleClickThrough(v));
     ipcMain.handle('overlay:hide', () => { if (win) win.hide(); });
-    ipcMain.handle('overlay:quit', () => { app.quit(); });
+    ipcMain.handle('overlay:quit', () => { quitApp(); });
 
     createWindow();
     if (!globalShortcut.register(SHOW_KEY, toggleVisible)) console.warn('[main] scorciatoia ' + SHOW_KEY + ' non registrata');
@@ -119,10 +135,7 @@ if (!gotLock) {
 
   app.on('second-instance', () => { if (win) win.showInactive(); });
   app.on('will-quit', () => { globalShortcut.unregisterAll(); });
-  app.on('window-all-closed', () => {
-    if (controller) controller.dispose().catch(() => {});
-    app.quit();
-  });
+  app.on('window-all-closed', () => { quitApp(); });
 }
 
 process.on('uncaughtException', (e) => console.error('[main] uncaughtException:', e));

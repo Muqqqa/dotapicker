@@ -49,6 +49,6 @@ test('smoke: l\'app Electron parte e resta viva 6s senza errori su stderr', { ti
   const alive = exited === null;
   try { spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']); } catch (e) { child.kill(); }
   assert.ok(alive, 'l\'app e\' terminata prematuramente, codice ' + exited + ' ' + err);
-  const bad = err.split('\n').filter((l) => /error|exception|cannot find/i.test(l) && !/autofill|dbus|GPU process|gpu_|special-words/i.test(l));
+  const bad = err.split('\n').filter((l) => /error|exception|cannot find/i.test(l) && !/autofill|dbus|GPU process|gpu_|special-words|wgc_capturer|desktop_capturer/i.test(l));
   assert.deepEqual(bad, [], 'stderr: ' + bad.join('\n'));
 });

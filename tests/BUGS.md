@@ -1,6 +1,6 @@
 # Bug / segnalazioni (tester)
 
-Nessun bug bloccante aperto. Aperto: B1 (bassa priorità). Note: B2, B3, B7. Chiusi: B4, B5, B6.
+Nessun bug bloccante aperto. Aperto: B1 (bassa priorità). Note: B2, B3, B7, B9. Chiusi: B4, B5, B6, B8.
 
 ## B1 - parseRole non tollera confusioni di caratteri OCR (bassa priorita', owner: app-dev, src/ocr/parseRole.js)
 - Passi: `parseRole('P0s 2')`, `parseRole('Pos l')`, `parseRole('Pos I')`, `parseRole('Pos S')`.
@@ -34,3 +34,13 @@ Nessun bug bloccante aperto. Aperto: B1 (bassa priorità). Note: B2, B3, B7. Chi
 
 ## B7 - Formato Rect non fissato nel contratto (nota, owner: lead / CONTRACT-v2)
 - app-dev usa `{x,y,width,height}` (come Electron); il contratto scrive solo "Rect". I test accettano entrambe le forme ({w,h} e {width,height}); controller e calibrazione (ui-designer) devono usare `width/height`.
+
+## B8 - topbar: ritratto e nome sbagliati con la lineetta SOPRA il ritratto (STRATEGY TIME) (CHIUSO, owner: app-dev, src/ocr/topbar.js)
+- Passi: `findTopBar(decodePNG('tests/fixtures/strategy-time-dire.png'))` (anche nel banco, fixture strategy-time-dire.png).
+- Atteso: ritratto subito sotto la lineetta (y≈5, altezza ≈52, larghezza ≈88) e nome sotto il ritratto (y≈64-78; slot 5 "Mooq'a#PE…" centro 1140,71).
+- Ottenuto: 10/10 lineette ma `portrait` {y:0, height:1} per tutti gli slot; `name` a y=7 (sopra il testo).
+- Test `todo` in tests/topbar.test.js ("strategy-time-dire: ..."); forzabili con STRATEGY_STRICT=1. Da riattivare quando app-dev corregge.
+- Corretto da app-dev: layout 'strategy'|'pick', ritratto sotto la lineetta, nome sotto il ritratto; test strategy-time-dire attivi (non piu' todo).
+
+## B9 - smoke Electron a volte rosso quando altri agenti usano Electron/la stessa userData (nota, owner: tester)
+- Visto 2 volte su 6 in `npm test` mentre altri agenti avviavano l'app; da solo e nelle ultime 3 esecuzioni passa. Non riproducibile a comando: probabile conflitto di istanza singola/userData con un Electron gia' aperto.

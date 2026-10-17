@@ -18,6 +18,14 @@ const FALLBACK_RANK = 40; // Archon, se il profilo non espone rank
 const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/';
 const PROFILE_REFRESH_MS = 10 * 60 * 1000; // personaname: aggiornato se cambia
 const NAME_OCR_EVERY_MS = 2500;            // OCR dei nomi finche' lo slot non e' trovato
+
+// Un worker OCR che si blocca o muore non deve fermare per sempre il ciclo principale: dopo il tempo massimo si rinuncia a quella lettura.
+function withTimeout(promise, ms, what) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(what + ": tempo scaduto")), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+const OCR_TIMEOUT_MS = 20000;
 const BAR_MISSING_RESET = 5;               // tick senza barra = draft finita (reset bannati/slot)
 const BAN_ROUNDS = 5;
 const CANDIDATES = 12;
@@ -260,10 +268,19 @@ class Controller {
     const disp = this.screen.getPrimaryDisplay();
     const w = Math.round(disp.size.width * disp.scaleFactor);
     const h = Math.round(disp.size.height * disp.scaleFactor);
+    // 1) la finestra di Dota: colori fedeli (la cattura dello schermo li altera con HDR/Auto HDR e le lineette
+    //    degli slot non si riconoscono) e nessuna finestra sopra puo' coprire la barra
+    try {
+      const wins = await this.desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: w, height: h }, fetchWindowIcons: false });
+      const dw = wins.find((s) => /^Dota 2$/.test(s.name));
+      if (dw && dw.thumbnail && !dw.thumbnail.isEmpty()) { this.captureKind = 'window'; return dw.thumbnail; }
+    } catch (e) { /* ripiega sullo schermo */ }
+    // 2) riserva: lo schermo intero
     const sources = await this.desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: w, height: h } });
     if (!sources.length) return null;
     const src = sources.find((s) => String(s.display_id) === String(disp.id)) || sources[0];
     const img = src.thumbnail;
+    this.captureKind = 'screen';
     return img && !img.isEmpty() ? img : null;
   }
 
@@ -297,7 +314,8 @@ class Controller {
   }
 
   findBar(rgba, ri) {
-    const area = ri.cal && ri.cal.topBar ? this.toPx(ri.cal.topBar, ri, rgba.width, rgba.height) : null;
+    // l'area salvata e' in coordinate dello schermo: vale solo per la cattura dello schermo, non per quella della finestra
+    const area = this.captureKind !== 'window' && ri.cal && ri.cal.topBar ? this.toPx(ri.cal.topBar, ri, rgba.width, rgba.height) : null;
     let tb = null;
     try { tb = area ? topbar.findTopBar(rgba, { area }) : null; } catch (e) { tb = null; }
     if (!tb) { try { tb = topbar.findTopBar(rgba); } catch (e) { tb = null; } }
@@ -312,7 +330,7 @@ class Controller {
     if (tb && nick && (force || Date.now() - d.lastNameOcr >= NAME_OCR_EVERY_MS)) {
       d.lastNameOcr = Date.now();
       try {
-        d.ocrNames = await this.nameOcr.readNames(rgba, tb.slots);
+        d.ocrNames = await withTimeout(this.nameOcr.readNames(rgba, tb.slots), OCR_TIMEOUT_MS, "OCR nomi");
         const m = topbar.matchNickname(d.ocrNames, nick);
         if (m) { d.slot = m.index; d.slotSource = 'nickname'; d.matchScore = m.score; return; }
       } catch (e) {
@@ -325,16 +343,22 @@ class Controller {
     }
   }
 
-  identifyPortraits(img, tb, ri) {
-    if (!tb || !this.matcher || !this.matcher.ready) return new Array(10).fill(null);
-    return tb.slots.map((s) => {
-      try { return this.matcher.identify(img.crop(s.portrait), ri.matchThreshold); } catch (e) { return null; }
-    });
+  /** heroId per slot (null = vuoto/incerto), dai ritratti sopra/sotto le lineette. */
+  identifyPortraits(rgba, tb) {
+    const out = new Array(10).fill(null);
+    if (!tb || !rgba || !this.matcher || !this.matcher.ready) return out;
+    for (const s of tb.slots) {
+      try {
+        const r = this.matcher.identifyPortrait(rgba, s.portrait);
+        out[s.index] = r ? r.heroId : null;
+      } catch (e) { out[s.index] = null; }
+    }
+    return out;
   }
 
   async readRole(img, ri) {
     try {
-      const r = await this.ocr.readRole(this.crop(img, ri.regions.roleText, ri));
+      const r = await withTimeout(this.ocr.readRole(this.crop(img, ri.regions.roleText, ri)), OCR_TIMEOUT_MS, "OCR ruolo");
       this.roleHist.push(r.role);
       if (this.roleHist.length > 5) this.roleHist.shift();
       return majorityRole(this.roleHist);
@@ -533,7 +557,7 @@ class Controller {
       }
       if (tb && rgba) await this.resolveSlot(rgba, tb, ri);
 
-      const portraits = img ? this.identifyPortraits(img, tb, ri) : new Array(10).fill(null);
+      const portraits = this.identifyPortraits(rgba, tb);
       const picks = portraits.filter(Boolean).length;
       if (d.hadPicks && picks === 0 && tb) {
         // la barra si e' svuotata: nuova draft
@@ -606,9 +630,12 @@ class Controller {
       const sig = JSON.stringify([allies, enemies, myId, role, lobby, this.engineLoadedFor, slot, base.excluded, !!gridCtx]);
       if (sig === this.lastSig) return;
 
-      if (!role) {
+      const full = allies.length === 4 && !!myId && enemies.length === 5;
+      if (!role && !full) {
         this.lastSig = sig;
-        this.set({ ...base, suggestion: null, status: 'waiting', message: 'Ruolo non rilevato (scritta di ruolo non leggibile)' });
+        // status 'draft' (non 'waiting'): l'overlay mostra squadra e i pulsanti Pos 1-5 per scegliere il ruolo a mano
+        // (partite con bot o non classificate non hanno la scritta di ruolo)
+        this.set({ ...base, suggestion: null, status: 'draft', message: 'Ruolo non rilevato: scegli la tua posizione qui sotto per avere il consiglio' });
         return;
       }
       const ready = await this.ensureEngineData(lobby);
@@ -627,13 +654,15 @@ class Controller {
           await this.engine.ensureStratz(all10, lobby)
             .catch(() => {}); // provider opzionale: senza token o in errore resta l'euristica
         }
-        const { suggestion, excluded, banCheck } = this.suggestFiltered({ allies, enemies, role, rankTier: lobby }, gridCtx);
+        // senza ruolo (es. STRATEGY TIME, nessuna scritta) niente consiglio di pick, ma la stima resta
+        let suggestion = null, excluded = base.excluded, banCheck = 'off';
+        if (role) ({ suggestion, excluded, banCheck } = this.suggestFiltered({ allies, enemies, role, rankTier: lobby }, gridCtx));
         // stima di vittoria: solo a draft completo (4 alleati + myHero, 5 nemici)
         let matchEstimate = null;
-        if (allies.length === 4 && myId && enemies.length === 5 && typeof this.engine.estimateMatch === 'function') {
+        if (full && typeof this.engine.estimateMatch === 'function') {
           try {
             matchEstimate = (await this.engine.estimateMatch({ allies: [...allies, myId], enemies, rankTier: lobby })) || null;
-          } catch (e) { matchEstimate = null; }
+          } catch (e) { matchEstimate = null; this.estimateErr = e; }
         }
         this.lastSig = sig;
         const message = banCheck === 'unverified'
@@ -739,7 +768,7 @@ class Controller {
         out.notes.push('Nickname non disponibile da OpenDota (profilo privato?): indica il tuo slot');
       } else {
         try {
-          out.ocrNames = await this.nameOcr.readNames(rgba, tb.slots);
+          out.ocrNames = await withTimeout(this.nameOcr.readNames(rgba, tb.slots), OCR_TIMEOUT_MS, "OCR nomi");
           const m = topbar.matchNickname(out.ocrNames, this.state.nickname);
           if (m) {
             out.mySlot = m.index; out.side = topbar.sideOf(m.index); out.slotSource = 'nickname'; out.matchScore = m.score;

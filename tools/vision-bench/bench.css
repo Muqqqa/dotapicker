@@ -77,3 +77,12 @@ table.slots{border-collapse:collapse;width:100%;font-size:14px}
 .slots tr.me td{background:#10243a}
 .slots .radiant{color:var(--radiant)}.slots .dire{color:var(--dire)}
 .notes{margin:0;padding-left:18px;font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+
+.portraits{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.portraits li{background:var(--card);border:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:0}
+.portraits li.me{border-color:var(--me)}
+.portraits canvas{width:100%;height:auto;display:block;background:#05080b;aspect-ratio:3/2}
+.portraits .who{display:flex;justify-content:space-between;gap:4px;overflow:hidden}
+.portraits .slot{font-weight:600}.portraits .slot.radiant{color:var(--radiant)}.portraits .slot.dire{color:var(--dire)}
+.portraits .hero{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.portraits .sc{color:var(--muted);font-variant-numeric:tabular-nums}

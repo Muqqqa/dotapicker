@@ -25,6 +25,8 @@ const PORTRAIT_H = 0.58;
 const NAME_TOP = 0.05;
 const NAME_H = 0.3;
 const NAME_PAD_X = 0.12;
+const STRAT_PORTRAIT_W = 1.25; // layout Strategy Time: ritratto largo 1.25 e alto 0.72 volte la lineetta (mediana)
+const STRAT_PORTRAIT_H = 0.72;
 
 function sideOf(index) { return index < 5 ? 'radiant' : 'dire'; }
 
@@ -192,6 +194,8 @@ function findTopBar(rgba, opts = {}) {
   }
   if (!(D > 0)) return null;
 
+  // layout: lineetta attaccata al bordo alto (STRATEGY TIME) o sotto il ritratto (fase di pick)
+  const strategy = barY0 <= Math.max(2, barW * 0.12);
   const byIdx = new Map(found.map((f) => [f.index, f]));
   const slots = [];
   for (let k = 0; k < 10; k++) {
@@ -199,10 +203,18 @@ function findTopBar(rgba, opts = {}) {
     const cx = f ? f.cx : (k < 5 ? C - D - (4 - k) * pitch : C + D + (k - 5) * pitch);
     const w = f ? f.x1 - f.x0 : barW;
     const bar = clampRect({ x: cx - w / 2, y: f ? f.y0 : barY0, width: w, height: f ? f.y1 - f.y0 : barH }, W, H);
-    const ph = barW * PORTRAIT_H;
-    const portrait = clampRect({ x: cx - barW / 2, y: bar.y - ph - Math.max(1, barH * 0.3), width: barW, height: ph }, W, H);
-    const name = clampRect({ x: cx - barW / 2 - barW * NAME_PAD_X, y: bar.y + bar.height + barW * NAME_TOP,
-      width: barW * (1 + 2 * NAME_PAD_X), height: barW * NAME_H }, W, H);
+    let portrait, name;
+    if (strategy) {
+      // lineetta in cima allo schermo: ritratto (16:9 inclinato) SOTTO la lineetta, nome sotto il ritratto
+      const pw = barW * STRAT_PORTRAIT_W, ph = barW * STRAT_PORTRAIT_H;
+      portrait = clampRect({ x: cx - pw / 2, y: bar.y + bar.height + 1, width: pw, height: ph }, W, H);
+      name = clampRect({ x: cx - barW * 0.62, y: portrait.y + portrait.height + barW * 0.07, width: barW * 1.24, height: barW * NAME_H }, W, H);
+    } else {
+      const ph = barW * PORTRAIT_H;
+      portrait = clampRect({ x: cx - barW / 2, y: bar.y - ph - Math.max(1, barH * 0.3), width: barW, height: ph }, W, H);
+      name = clampRect({ x: cx - barW / 2 - barW * NAME_PAD_X, y: bar.y + bar.height + barW * NAME_TOP,
+        width: barW * (1 + 2 * NAME_PAD_X), height: barW * NAME_H }, W, H);
+    }
     slots.push({ index: k, side: sideOf(k), bar, portrait, name, found: !!f });
   }
   // coerenza: distanza dei trovati dal modello
@@ -216,7 +228,7 @@ function findTopBar(rgba, opts = {}) {
   const ys = slots.flatMap((s) => [s.portrait.y, s.name.y + s.name.height]);
   const frame = clampRect({ x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs),
     height: Math.max(...ys) - Math.min(...ys) }, W, H);
-  return { slots, confidence: Math.round(confidence * 100) / 100, frame, centerX: C, pitch };
+  return { slots, confidence: Math.round(confidence * 100) / 100, frame, centerX: C, pitch, layout: strategy ? 'strategy' : 'pick' };
 }
 
 // ---- nickname ------------------------------------------------------------------
@@ -268,7 +280,19 @@ function nameScore(ocr, persona) {
     const cover = Math.min(1, a.length / Math.min(b.length, 8));
     pref *= isTruncated(raw) ? 0.6 + 0.4 * cover : 0.5 + 0.45 * cover;
   }
-  return Math.max(full, pref);
+  // nomi con "#TAG" (come Mooq'a#PEDOHUNTER): la parte dopo il # si legge bene anche quando le prime lettere vengono
+  // sporche (a piena risoluzione "Mooq'a" diventa "Yiooga"). Prefisso del tag uguale + prima parte almeno un po' simile.
+  let tag = 0;
+  const rs = raw.replace(/(…|\.{2,})\s*$/, ''), ph = rs.indexOf('#'), pp = String(persona).indexOf('#');
+  if (ph >= 0 && pp >= 0) {
+    const oTag = canon(rs.slice(ph + 1)), pTag = canon(String(persona).slice(pp + 1));
+    const oPre = canon(rs.slice(0, ph)), pPre = canon(String(persona).slice(0, pp));
+    if (oTag.length >= 2 && pTag.startsWith(oTag.slice(0, Math.min(oTag.length, pTag.length)))) {
+      const preSim = oPre && pPre ? 1 - lev(oPre, pPre) / Math.max(oPre.length, pPre.length) : 0;
+      if (preSim >= 0.35) tag = 0.7 + 0.28 * preSim;
+    }
+  }
+  return Math.max(full, pref, tag);
 }
 
 const NICK_THRESHOLD = 0.7;

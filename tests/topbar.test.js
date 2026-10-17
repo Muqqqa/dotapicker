@@ -176,3 +176,72 @@ test('catena reale: findTopBar -> OCR nomi -> matchNickname -> slot 5, dire', as
     assert.equal(m.sideOf(r.index), 'dire');
   } finally { await ocr.terminate(); }
 });
+
+// ---- STRATEGY TIME (strategy-time-dire.png, 2000x837 da 3440x1440): la lineetta sta SOPRA il ritratto ----
+// Verita' a terra misurata a mano: lineette a y=0..4; ritratto subito sotto, y~5..57 (altezza ~52, larghezza ~88);
+// nome centrato a y~64..78 (slot 5: "Mooq'a#PE…" a x~1140,y~71). Slot 0 = Axe, slot 5 = Keeper of the Light.
+const ST = { portrait5: { x: 1110, y: 6, w: 80, h: 48 }, name5: { x: 1140, y: 71 }, name0: { x: 465, y: 71 } };
+function checkStrategy(m, img, k, label) {
+  const tb = m.findTopBar(img);
+  assert.ok(tb, label + ': findTopBar null');
+  assert.equal(tb.slots.filter((s) => s.found).length, 10, label + ': servono 10 lineette trovate');
+  assert.ok(tb.confidence >= 0.6, label + ': confidence ' + tb.confidence);
+  tb.slots.forEach((s, i) => {
+    assert.ok(H_(s.portrait) > 30 * k, `${label}: ritratto slot ${i} alto ${H_(s.portrait)} (atteso > ${Math.round(30 * k)})`);
+    assert.ok(s.portrait.y >= s.bar.y + H_(s.bar) - 2 * k - 2, `${label}: ritratto slot ${i} non sotto la lineetta (portrait.y ${s.portrait.y}, bar ${JSON.stringify(s.bar)})`);
+  });
+  const s5 = tb.slots[5], tol = Math.max(4, 6 * k);
+  const cxp = s5.portrait.x + W_(s5.portrait) / 2;
+  assert.ok(Math.abs(cxp - 1148 * k) < 12 * k, `${label}: ritratto slot 5 centrato a ${cxp}, atteso ~${1148 * k}`);
+  assert.ok(inRect(s5.name, ST.name5.x * k, ST.name5.y * k, tol), `${label}: rettangolo nome slot 5 ${JSON.stringify(s5.name)} non contiene il nick`);
+  assert.ok(inRect(tb.slots[0].name, ST.name0.x * k, ST.name0.y * k, tol), `${label}: rettangolo nome slot 0 fuori posto ${JSON.stringify(tb.slots[0].name)}`);
+  return tb;
+}
+const STRATEGY_TODO = false; // B8 chiuso da app-dev
+test('strategy-time-dire: 10/10 lineette, ritratto SOTTO la lineetta, nome dove sta il testo', { todo: STRATEGY_TODO }, (t) => {
+  const m = load(t); if (!m) return;
+  checkStrategy(m, fixture('strategy-time-dire.png'), 1, 'strategy');
+});
+for (const k of [0.6, 1.5]) {
+  test(`strategy-time-dire: indipendente dalla risoluzione (scala ${k})`, { todo: STRATEGY_TODO }, (t) => {
+    const m = load(t); if (!m) return;
+    checkStrategy(m, scaleRGBA(fixture('strategy-time-dire.png'), k), k, 'strategy x' + k);
+  });
+}
+test('strategy-time-dire: nickname -> slot 5, lato dire (nomi trascritti)', (t) => {
+  const m = load(t); if (!m) return;
+  const names = ['Елена', 'Κατερίνα', 'Andreas', 'Jia', 'Eszter', "Mooq'a#PE…", 'Amadou', 'Trung', '詩涵', 'ไทย'];
+  const r = m.matchNickname(names, "Mooq'a#PEPPE");
+  assert.equal(r && r.index, 5);
+  assert.equal(m.sideOf(r.index), 'dire');
+});
+test('strategy-time-dire: catena reale con OCR vero -> slot 5, dire', { todo: STRATEGY_TODO }, async (t) => {
+  const m = load(t); if (!m) return;
+  const fs = require('fs'), cache = p('tools', 'vision-bench', '.cache');
+  try { require.resolve('tesseract.js', { paths: [p()] }); } catch (e) { return t.skip('tesseract.js non installato'); }
+  if (!['eng', 'ita'].every((l) => fs.existsSync(require('path').join(cache, l + '.traineddata')))) return t.skip('dati lingua non in cache');
+  const { NameOcr } = require(p('src', 'ocr', 'nameOcr.js'));
+  const ocr = new NameOcr(cache);
+  try {
+    const img = fixture('strategy-time-dire.png');
+    const names = await ocr.readNames(img, m.findTopBar(img).slots);
+    assert.match(String(names[5]), /^Mooq/i, 'OCR slot 5: ' + names[5]);
+    const r = m.matchNickname(names, "Mooq'a#PEPPE");
+    assert.equal(r && r.index, 5, JSON.stringify(names));
+  } finally { await ocr.terminate(); }
+});
+
+test('nameOcr.prepareName: il testo azzurro chiaro dei nomi si legge, l\'icona arancione no', () => {
+  const { prepareName } = require('../src/ocr/nameOcr');
+  const W = 120, H = 30, data = Buffer.alloc(W * H * 4);
+  for (let i = 0; i < W * H; i++) { data[i * 4] = 30; data[i * 4 + 1] = 40; data[i * 4 + 2] = 55; data[i * 4 + 3] = 255; }
+  const put = (x0, x1, rgb) => { for (let y = 8; y < 20; y++) for (let x = x0; x < x1; x++) { const j = (y * W + x) * 4; data[j] = rgb[0]; data[j + 1] = rgb[1]; data[j + 2] = rgb[2]; } };
+  put(10, 60, [170, 195, 235]); // testo azzurro chiaro (saturazione ~65): deve restare
+  const withText = prepareName({ data, width: W, height: H }, { x: 0, y: 0, width: W, height: H });
+  assert.ok(withText, 'il testo azzurro chiaro non deve essere scartato come se fosse colore');
+  const onlyIcon = Buffer.from(data);
+  for (let i = 0; i < W * H; i++) { onlyIcon[i * 4] = 30; onlyIcon[i * 4 + 1] = 40; onlyIcon[i * 4 + 2] = 55; }
+  const put2 = (x0, x1, rgb) => { for (let y = 8; y < 20; y++) for (let x = x0; x < x1; x++) { const j = (y * W + x) * 4; onlyIcon[j] = rgb[0]; onlyIcon[j + 1] = rgb[1]; onlyIcon[j + 2] = rgb[2]; } };
+  put2(10, 60, [235, 120, 40]); // icona arancione (saturazione ~195): non e' testo
+  assert.equal(prepareName({ data: onlyIcon, width: W, height: H }, { x: 0, y: 0, width: W, height: H }), null);
+});

@@ -91,6 +91,10 @@ test('store: crea la cartella mancante', (t) => {
 // ---- majorityRole
 test('ocr.majorityRole: voto di maggioranza', (t) => {
   const m = mod(t, 'src/ocr/parseRole.js'); if (!m) return;
-  assert.equal(m.majorityRole([3, null, 3, 2]), 3);
+  assert.equal(m.majorityRole([3, null, 3, 2, 3]), 3);
   assert.equal(m.majorityRole([null, null]), null);
+  // senza scritta di ruolo l'OCR legge testo a caso: un ruolo instabile non vale
+  assert.equal(m.majorityRole([3, 5, 1, 3, 2]), null);
+  assert.equal(m.majorityRole([3, null, 3, 2]), null);
+  assert.equal(m.majorityRole([3, null, 3, 2], 2), 3);
 });

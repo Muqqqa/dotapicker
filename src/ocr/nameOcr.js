@@ -12,6 +12,7 @@ const path = require('path');
 const { cropRgba, resizeRgba, encodePng } = require('./png');
 
 const TARGET_TEXT_H = 48; // altezza del ritaglio ingrandito (px): tesseract preferisce testo ~30px
+const MAX_TEXT_CHROMA = 110; // oltre questa saturazione il pixel non e' testo (icona "i" arancione, badge); il testo azzurro chiaro dei nomi ha ~75
 
 function prepareName(rgba, rect) {
   if (!rect || rect.width < 4 || rect.height < 4) return null;
@@ -22,6 +23,9 @@ function prepareName(rgba, rect) {
   for (let i = 0, j = 0; i < n; i++, j += 4) {
     const r = c.data[j], g = c.data[j + 1], b = c.data[j + 2];
     L[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    // il testo dei nomi e' grigio/bianco: i pixel colorati (icona "i" arancione, badge) non sono testo
+    // pixel molto saturi, oppure caldi (icona "i" arancione, anche sfumata a bassa risoluzione): il testo e' azzurro/grigio (b >= r)
+    if (Math.max(r, g, b) - Math.min(r, g, b) > MAX_TEXT_CHROMA || r - b > 45) L[i] = 0;
   }
   const sorted = Array.from(L).sort((a, b) => a - b);
   const bg = sorted[Math.floor(n * 0.5)];

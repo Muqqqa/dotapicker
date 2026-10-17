@@ -39,13 +39,17 @@ function parseRole(text) {
   return null;
 }
 
-/** Ruolo piu' frequente tra piu' letture (stabilizza l'OCR). */
-function majorityRole(list) {
+/**
+ * Ruolo piu' frequente tra piu' letture (stabilizza l'OCR). Vale solo se compare almeno `min` volte (default 3):
+ * dove non c'e' una scritta di ruolo (partite con bot, non classificate) l'OCR legge testo a caso e un ruolo
+ * che salta da una lettura all'altra non deve cambiare il consiglio.
+ */
+function majorityRole(list, min = 3) {
   const c = {};
   for (const r of list) if (r) c[r] = (c[r] || 0) + 1;
   let best = null, n = 0;
   for (const k of Object.keys(c)) if (c[k] > n) { best = Number(k); n = c[k]; }
-  return best;
+  return n >= min ? best : null;
 }
 
 module.exports = { parseRole, normalize, majorityRole };

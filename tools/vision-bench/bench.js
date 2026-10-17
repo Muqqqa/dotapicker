@@ -163,6 +163,8 @@
         box(s.name, 'rgba(230,235,240,.55)', Math.max(1, lw / 2), [lw, lw]);
         const n = r.names && r.names[i];
         if (n) tag(n, s.name.x, s.name.y + s.name.h + lw, '#e6ebf0');
+        const hh = r.heroes && r.heroes[i];
+        if (hh && hh.name) tag(hh.name + (typeof hh.score === 'number' ? ' ' + Math.round(hh.score * 100) + '%' : ''), s.portrait.x, s.portrait.y + s.portrait.h - fs * 1.6, C('amber'), C('amber-ink'));
       });
     }
     if (bar && me != null) {
@@ -208,6 +210,7 @@
       add('findTopBar', r.topbar.timeMs + ' ms');
       if (r.ocrTimeMs != null) add('OCR nomi', r.ocrTimeMs + ' ms' + (r.namesSource ? ' · ' + r.namesSource : ''));
       else if (r.namesSource) add('Nomi', r.namesSource);
+      if (r.heroes) { add('Eroi riconosciuti', r.heroes.filter(Boolean).length + ' su 10 in ' + r.heroesTimeMs + ' ms'); }
       if (r.match) { add('Nickname: punteggio', pct(r.match.score)); add('matchNickname', r.matchTimeMs + ' ms'); }
     } else if (r.modules.topbar.ok) add('Barra', 'non trovata' + (r.topbar && r.topbar.timeMs != null ? ` (${r.topbar.timeMs} ms)` : ''));
     else add('Barra', 'modulo non ancora disponibile');
@@ -235,6 +238,7 @@
       dl.append(dt, dd);
     }
 
+    renderPortraits(r, bar);
     const tb = $('slotTable').tBodies[0]; tb.textContent = '';
     for (let i = 0; i < 10; i++) {
       const s = bar && bar.slots[i];
@@ -254,6 +258,27 @@
     for (const [k, m] of Object.entries(r.modules)) if (!m.ok) notes.unshift(m.message);
     if (!notes.length) notes.push('Nessuna nota.');
     for (const n of notes) { const li = document.createElement('li'); li.textContent = n; ul.append(li); }
+  }
+  // ritaglio del ritratto di ogni slot + eroe riconosciuto (r.heroes[i] = {name, score}, se il server lo calcola)
+  function renderPortraits(r, bar) {
+    const ol = $('portraits'); ol.textContent = '';
+    if (!bar) { const li = document.createElement('li'); li.textContent = 'Barra non trovata'; ol.append(li); return; }
+    const src = imgC;
+    for (const s of bar.slots) {
+      const li = document.createElement('li'); if (r.match && r.match.index === s.index) li.className = 'me';
+      const cv = document.createElement('canvas'); const p = s.portrait;
+      cv.width = Math.max(1, p.w); cv.height = Math.max(1, p.h);
+      try { cv.getContext('2d').drawImage(src, p.x, p.y, p.w, p.h, 0, 0, cv.width, cv.height); } catch (e) { /* fuori immagine */ }
+      cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Ritaglio ritratto slot ' + SLOT_LABEL(s.index) + ', ' + p.w + ' per ' + p.h + ' pixel');
+      const who = document.createElement('div'); who.className = 'who';
+      const sl = document.createElement('span'); sl.className = 'slot ' + s.side; sl.textContent = SLOT_LABEL(s.index);
+      const hero = r.heroes && r.heroes[s.index];
+      const nm = document.createElement('span'); nm.className = 'hero'; nm.textContent = hero ? (hero.name || '—') : (r.heroes ? 'vuoto/incerto' : 'eroe n/d');
+      who.append(sl, nm);
+      const sc = document.createElement('div'); sc.className = 'sc';
+      sc.textContent = (hero && typeof hero.score === 'number' ? 'punteggio ' + pct(hero.score) + ' · distacco ' + pct(hero.margin) + ' · ' : '') + p.w + '×' + p.h + ' px';
+      li.append(cv, who, sc); ol.append(li);
+    }
   }
   const pct = (x) => (typeof x === 'number' ? Math.round(x * 100) + '%' : '—');
   function say(msg) { const ul = $('notes'); ul.textContent = ''; const li = document.createElement('li'); li.textContent = msg; ul.append(li); $('verdict').textContent = msg; $('verdict').className = 'verdict none'; }
