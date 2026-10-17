@@ -1,0 +1,17 @@
+# dipendenze e build
+node_modules/
+dist/
+out/
+
+# dati locali e personali (giudizi del banco di prova, cache)
+docs/feedback.json
+*.log
+.cache/
+
+# configurazioni locali (contengono impostazioni della macchina)
+settings.json
+.claude/settings.local.json
+
+# sistema
+Thumbs.db
+.DS_Store

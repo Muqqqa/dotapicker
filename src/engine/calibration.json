@@ -1,0 +1,256 @@
+{
+  "date": "2026-10-17",
+  "source": "OpenDota /publicMatches (partite recenti; salvati solo eroi, esito e rank medio, nessun dato dei giocatori)",
+  "filters": "lobby non bot, modalita draft (AP/CM/RD/SD/CD/Ranked AP), durata >= 10 min, rank medio presente, 10 eroi noti",
+  "requests": 53,
+  "matches": 2104,
+  "radiantWinPct": 55.1,
+  "rankBracketCounts": {
+    "1": 48,
+    "2": 132,
+    "3": 305,
+    "4": 430,
+    "5": 550,
+    "6": 353,
+    "7": 286
+  },
+  "method": "Regressione logistica ridge (lambda 1) con intercetta per il lato Radiant (ignorata a runtime) e pesi >= 0 (le feature con peso negativo sono escluse: syn, mech); metriche in 5-fold cross validation; temperatura 0.975 sui pesi",
+  "featureOrder": [
+    "base",
+    "matchup",
+    "syn",
+    "mech",
+    "baseGap"
+  ],
+  "activeFeatures": [
+    "base",
+    "matchup",
+    "baseGap"
+  ],
+  "weights": {
+    "base": 1.6162,
+    "matchup": 0.06803,
+    "syn": 0,
+    "mech": 0,
+    "baseGap": 0.16299
+  },
+  "cov": [
+    [
+      0.06433317924443932,
+      0.008847296096756548,
+      0,
+      0,
+      -0.0011147360403056486
+    ],
+    [
+      0.008847296096756547,
+      0.006910160761647341,
+      0,
+      0,
+      0.000012140440739682959
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      -0.0011147360403056493,
+      0.000012140440739682852,
+      0,
+      0,
+      0.0021143789875766937
+    ]
+  ],
+  "sideIntercept": 0.2045,
+  "temperature": 0.975,
+  "calibrationSlopeBeforeTemperature": 0.975,
+  "intervalFloorPoints": 4,
+  "metrics": {
+    "accuracyHeroesOnly": 0.5741,
+    "accuracyWithSide": 0.5794,
+    "brierWithSide": 0.24043,
+    "logLossWithSide": 0.67386,
+    "baseline": {
+      "accuracyChance": 0.5,
+      "accuracyAlwaysRadiant": 0.5513,
+      "brier": 0.25,
+      "logLoss": 0.69315
+    },
+    "beforeTemperature": {
+      "brier": 0.24043,
+      "logLoss": 0.67387
+    },
+    "accuracy": 0.5741
+  },
+  "calibrationTableRadiant": [
+    {
+      "bin": "<45",
+      "n": 256,
+      "predicted": 40.9,
+      "actual": 39.1
+    },
+    {
+      "bin": "45-50",
+      "n": 323,
+      "predicted": 47.7,
+      "actual": 49.5
+    },
+    {
+      "bin": "50-55",
+      "n": 453,
+      "predicted": 52.6,
+      "actual": 51.2
+    },
+    {
+      "bin": "55-60",
+      "n": 459,
+      "predicted": 57.4,
+      "actual": 59.5
+    },
+    {
+      "bin": ">60",
+      "n": 613,
+      "predicted": 64.8,
+      "actual": 64.4
+    }
+  ],
+  "calibrationTableFavorite": [
+    {
+      "bin": "50-52",
+      "n": 383,
+      "predicted": 51,
+      "actual": 52.2
+    },
+    {
+      "bin": "52-54",
+      "n": 364,
+      "predicted": 53,
+      "actual": 54.7
+    },
+    {
+      "bin": "54-56",
+      "n": 324,
+      "predicted": 55,
+      "actual": 56.5
+    },
+    {
+      "bin": "56-60",
+      "n": 517,
+      "predicted": 57.8,
+      "actual": 57.3
+    },
+    {
+      "bin": ">60",
+      "n": 516,
+      "predicted": 63.9,
+      "actual": 64
+    }
+  ],
+  "accuracyByDeviation": [
+    {
+      "minDev": 0,
+      "n": 2104,
+      "accuracy": 0.574
+    },
+    {
+      "minDev": 1,
+      "n": 1921,
+      "accuracy": 0.58
+    },
+    {
+      "minDev": 2,
+      "n": 1721,
+      "accuracy": 0.586
+    },
+    {
+      "minDev": 3,
+      "n": 1531,
+      "accuracy": 0.599
+    },
+    {
+      "minDev": 4,
+      "n": 1357,
+      "accuracy": 0.596
+    },
+    {
+      "minDev": 5,
+      "n": 1193,
+      "accuracy": 0.602
+    },
+    {
+      "minDev": 6,
+      "n": 1033,
+      "accuracy": 0.606
+    },
+    {
+      "minDev": 8,
+      "n": 745,
+      "accuracy": 0.63
+    },
+    {
+      "minDev": 10,
+      "n": 516,
+      "accuracy": 0.64
+    }
+  ],
+  "confidenceRules": {
+    "mediaFrom": 5,
+    "altaFrom": null
+  },
+  "ablationCrossValidated": [
+    {
+      "features": [
+        "base"
+      ],
+      "logLoss": 0.6761,
+      "brier": 0.24157
+    },
+    {
+      "features": [
+        "base",
+        "matchup"
+      ],
+      "logLoss": 0.6767,
+      "brier": 0.24184
+    },
+    {
+      "features": [
+        "base",
+        "baseGap"
+      ],
+      "logLoss": 0.6731,
+      "brier": 0.24007
+    },
+    {
+      "features": [
+        "base",
+        "matchup",
+        "baseGap"
+      ],
+      "logLoss": 0.6737,
+      "brier": 0.24037
+    },
+    {
+      "features": [
+        "base",
+        "matchup",
+        "syn",
+        "mech",
+        "baseGap"
+      ],
+      "logLoss": 0.6739,
+      "brier": 0.24043
+    }
+  ],
+  "ablationNote": "In cross validation il winrate base degli eroi porta quasi tutto il segnale; la composizione (baseGap) migliora un poco; matchup, sinergia euristica e meccaniche non migliorano fuori campione (syn e mech vengono escluse dal vincolo di non negativita). Il modello finale mantiene i matchup con il loro piccolo peso perche richiesti dal prodotto, la differenza di log loss e trascurabile (0.0006)."
+}

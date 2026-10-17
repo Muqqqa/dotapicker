@@ -1,0 +1,1 @@
+﻿window.TEAM_STATUS=window.TEAM_STATUS||{};window.TEAM_STATUS['tester']={state:'done',task:'Test completati, rapporto in tests/REPORT.md',progress:100,log:['65 test: 61 pass, 0 fail, 4 todo','Smoke: electron parte, renderer mock senza errori console','Bug minore B1 (OCR) in tests/BUGS.md','Tutti gli altri agenti in stato done'],updated:new Date().toISOString()};

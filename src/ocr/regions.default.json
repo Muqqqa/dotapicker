@@ -1,0 +1,23 @@
+{
+  "_doc": "Rettangoli [x,y,w,h] in pixel su schermo di riferimento baseWidth x baseHeight. Valori di DEFAULT APPROSSIMATIVI: calibrali copiando questo file in <userData>/regions.json e modificandolo (la scalatura per altre risoluzioni e' automatica).",
+  "baseWidth": 1920,
+  "baseHeight": 1080,
+  "userSide": "left",
+  "left": [
+    [330, 14, 96, 54],
+    [432, 14, 96, 54],
+    [534, 14, 96, 54],
+    [636, 14, 96, 54],
+    [738, 14, 96, 54]
+  ],
+  "right": [
+    [1086, 14, 96, 54],
+    [1188, 14, 96, 54],
+    [1290, 14, 96, 54],
+    [1392, 14, 96, 54],
+    [1494, 14, 96, 54]
+  ],
+  "myHero": [834, 780, 140, 80],
+  "roleText": [740, 700, 440, 60],
+  "matchThreshold": 0.55
+}

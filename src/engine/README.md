@@ -1,0 +1,72 @@
+﻿# Engine suggerimenti (tactician)
+
+CommonJS, zero dipendenze (usa `fetch` nativo di Node >= 18). Auto-check: `node src/engine/selfcheck.js`.
+
+## API (`require('./src/engine')`)
+- `await loadData({ rankTier, cacheDir?, offline?, matchups?, fetch? })` -> `{ source, heroes, bracket, matchups, warning? }`
+  - `source`: `network | cache | stale-cache | sample`. Fallback automatico rete -> cache scaduta -> `sample-data.json`.
+  - `offline:true` usa solo il sample (test). `cacheDir` consigliato: sottocartella di `userData` (default `~/.dota-picker-cache`).
+  - `matchups`: `'lazy'` (default, prefetch in background, 3 richieste parallele) | `'all'` (attende) | `'none'`.
+- `suggest({ allies, enemies, role, rankTier })` (sincrona, lancia se i dati non sono caricati) -> `{ top, alternatives[5], teamNeeds, wildcard }`.
+  `allies/enemies` accettano id numerici (o oggetti con `heroId`). `role` 1..5 (null = nessun filtro).
+  `Pick = { heroId, name, img, score 0-100, winrate (%), counter 0-100 (50 neutro), synergy 0-100 (50 neutro), reasons[], covers[] }`.
+  `teamNeeds = [{ key, label, level 0..1, note: 'Mancante'|'Scarso'|'Coperto'|'Da definire' }]` con key `disable, initiation, magic, push, support, tank`.
+- `heroImageUrl(heroId)` -> URL CDN Valve (`null` se eroe sconosciuto).
+- Extra: `ensureMatchups(ids)` (async, chiamala quando cambiano i nemici per avere i counter subito), `heroName(id)`, `getHeroes()` (ritorna `{ id, heroId, name, img }`), `isLoaded()`.
+
+## Meta, bilanciamento e STRATZ (opzionale)
+- Meta recente (peso 0.08, rinormalizzato): da `pub_pick_trend` / `pub_win_trend` (7 valori giornalieri, ordine cronologico). L'ultimo e' un giorno parziale (verificato su 127 eroi: 0.12-0.22 della media) e viene scartato (`dropPartial`). Winrate recente = somma vittorie / somma pick; crescita = ultimi giorni vs primi, normalizzata sulla tendenza globale. Reasons "In crescita / In calo nell'ultima settimana", "Winrate recente alto".
+- Popolarita' competitiva (peso 0.04): `sqrt((pro_pick+pro_ban)/max)`; reason solo se molto alta.
+- STRATZ (GraphQL, `https://api.stratz.com/graphql`, header `Authorization: Bearer`): attivo solo con token in `loadData({ stratzToken })`, `loadData({ stratzConfigFile })` (JSON `{ token, query?, extraArgs? }`) o env `STRATZ_TOKEN`. Il token resta in memoria, mai su disco o negli errori. Con il token, chiama `await ensureStratz(heroIdsAlleatiENemici, rankTier)` prima di `suggest`: sinergia 'with' e counter 'vs' per bracket sostituiscono matchups OpenDota ed euristica; cache su disco per bracket (24h). Senza token (o in caso di errore) resta l'euristica attuale. `getProviderInfo()` espone stato e ultimo errore.
+- ATTENZIONE: la documentazione ufficiale STRATZ (docs.stratz.com) e' dietro Cloudflare e non e' leggibile da qui; lo schema GraphQL (`heroStats.matchUp`, `bracketBasicIds`, valori enum, semantica di `winCount`) e' scritto da memoria e NON VERIFICATO. Il parser e' tollerante e un errore disattiva il provider senza rompere nulla; la query si puo' sovrascrivere dal file di config (`query` con segnaposto `{{heroId}}`, `{{bracket}}`, `{{extraArgs}}`). Nessun filtro temporale e' attivo di default (usa `extraArgs` quando l'argomento sara' verificato).
+
+- Bilanciamento (`balance.js`): tabella statica [nome eroe, livello, tema] da aggiornare a mano. Aggiustamento sul punteggio finale (0-100, clamp): nerf forte -4, medio -2.5, lieve -1.5; buff forte +3, medio +2, lieve +1; core dipendenti da oggetti ridimensionati -0.5; misti -0.5 o nessuno. Una reason ("Indebolito/Rinforzato dall'ultimo aggiornamento: <eroe>, <motivo>") compare solo su top/alternative e con effetto >= 1 punto. L'app non mostra ne' cita versioni o date; l'engine non le legge piu'. I winrate delle fonti possono riflettere in parte il periodo precedente, per questo l'effetto e' piccolo. `getBalanceInfo()` elenca nomi risolti e non trovati nei dati caricati; `suggest(input, { includeAll:true })` aggiunge `all` (debug/test).
+
+## Jolly (`suggest(...).wildcard`)
+`null` oppure `{ heroId, name, img, needKey, needLabel, expectedWinrate, winrateGap, items, text, teamOnly:false }`, oppure, senza eroe adatto ma con bisogno forte, `{ heroId:null, needKey, needLabel, teamOnly:true, items, text }`.
+- Solo per `detection` (rilevamento), `antiheal`, `magicres`. Il bisogno deve essere "Mancante", la minaccia sopra soglia (rilevamento: 2+ invisibili; anti-cura: cura >= 7; resistenza magica: burst magico >= 9, cioe' draft gia' fragile) e nessuno dei top 3 deve coprirlo (risposta >= 2).
+- Candidato: fuori dal top 3, in ruolo (primario o secondario, mai fuori ruolo), calo di winrate atteso dal 1° consiglio <= 2,5 punti. Rilevamento in Pos 1-3: solo eroe naturale del ruolo; in Pos 4-5 anche secondario. Un solo jolly: il miglior punteggio fra i bisogni eleggibili.
+- Solo squadra (`teamOnly`): nessun candidato valido e minaccia forte (rilevamento 3+ invisibili, anti-cura >= 9, magicres >= 12). Se gli alleati sono gia' 4 il testo dice "copritelo con ..." invece di "lo puo' coprire un compagno".
+- `items`: alternative d'acquisto (Dust, Sentry, Gem / Spirit Vessel, Shiva's Guard / BKB, Pipe). I nomi sono verificati contro `items-reference.json`, l'elenco del negozio scaricato da Liquipedia (Portal:Items, CC BY-SA 3.0) con oggetti rimossi e non rilasciati; `tests/items.test.js` fallisce se un oggetto suggerito non esiste più. Le reasons e i testi usano lettere accentate, virgola decimale, nessun riferimento a versioni.
+
+## Stima di vittoria del match (`estimateMatch`)
+`estimateMatch({ allies:[5], enemies:[5], rankTier })` -> `null` se non e' 5 contro 5 (o ci sono eroi duplicati/sconosciuti), altrimenti `{ winProbability (%, 1 decimale), low, high, confidence: 'bassa'|'media'|'alta', factors:[{ text, impact (punti %, + a favore) }] (max 4, per |impact|), note }`.
+- Modello (`match.js`), antisimmetrico (scambiando le squadre p -> 100 - p): `logit(p) = w.base*Fbase + w.matchup*Fmatchup + w.syn*Fsyn + w.mech*Fmech + w.baseGap*FbaseGap`, ogni F = mia squadra meno avversari: winrate base del bracket (regrediti come in suggest), 25 matchup alleato-vs-nemico simmetrizzati (con shrinkage), sinergie interne (STRATZ se disponibili), lacune di meccaniche non coperte, lacune di composizione. `low/high` da incertezza dei parametri (covarianza in calibration.json) con pavimento di 4 punti; `confidence` dalle regole misurate in calibrazione ('media' solo con scarto >= 5 punti da 50; 'alta' mai, perche' la precisione misurata non supera il 65%).
+- **Calibrazione onesta** (`calibration.json`, 2026-10-17, script `tools/fetch-matches.js` + `tools/calibrate.js`): 2104 partite pubbliche recenti da OpenDota `/publicMatches` (53 richieste a ~1/s; solo eroi, esito e rank medio, nessun dato dei giocatori; modalita' draft, durata >= 10 min; Radiant vince il 55,1%). Metriche in 5-fold cross validation: accuratezza **57,4%** con i soli eroi (57,9% includendo il lato; caso 50%, "sempre Radiant" 55,1%), Brier **0,2404** (baseline 0,2500), log loss **0,6739** (baseline 0,6931). Il modello era gia' quasi calibrato (pendenza 0,975; temperatura 0,975 sui pesi). Pesi: base 1.6162, matchup 0.06803, syn 0, mech 0, baseGap 0.16299 (syn e mech escluse: fuori campione non aiutano).
+- Tabella di calibrazione (probabilita' Radiant, lato incluso, fuori campione):
+
+| fascia | partite | previsto | reale |
+|---|---|---|---|
+| <45 | 256 | 40,9% | 39,1% |
+| 45-50 | 323 | 47,7% | 49,5% |
+| 50-55 | 453 | 52,6% | 51,2% |
+| 55-60 | 459 | 57,4% | 59,5% |
+| >60 | 613 | 64,8% | 64,4% |
+
+- Lettura onesta: la draft spiega solo una parte del risultato (precisione ~57%, tipica dei soli eroi): conta soprattutto come giocate. Quasi tutto il segnale viene dal winrate base degli eroi al rank; i matchup 1-vs-1 e la sinergia euristica non migliorano le previsioni fuori campione (ablazione in `calibration.json`). Limiti: campione di 2104 partite (errore standard sull'accuratezza ~1,1 punti), winrate degli eroi calcolati su dati che includono in minima parte le stesse partite, calibrazione senza STRATZ (con STRATZ le sinergie possono pesare diversamente), vantaggio di lato ignorato (lato sconosciuto).
+
+## Numero di suggerimenti
+`suggest(input, { alternatives: 5 })`: top + `alternatives` (default 5 => 6 suggerimenti, ordinati per punteggio; 0 o piu', configurabile). Tutte le regole "top 3" ragionano sui suggerimenti mostrati (top + alternative): il jolly e' fuori dai mostrati e scatta solo se nessuno di essi copre la lacuna; `fix.text` dice "già tra i consigli" se l'eroe e' fra i mostrati; reasons max 4 per pick. Con 6 mostrati il jolly con eroe e' molto raro (i 6 coprono gia' quasi tutto entro ~2,5 punti): il tetto `GEN_GAP` resta 2,5 (vedi sotto), il ramo `teamOnly` resta quello piu' frequente.
+
+## Fix per bisogno e jolly generalizzato
+- Ogni voce di `teamNeeds` con note `Mancante` o `Scarso` ha `fix: { hero: { heroId, name, img, expectedWinrate, winrateGap } | null, items: string | null, text }`. `hero` = miglior candidato del ruolo (posizione primaria o secondaria, mai gia' scelto) che copre il bisogno (tag/risposta >= 2) con calo di winrate atteso <= 4 punti dal 1° consiglio; se e' gia' nel top 3 viene indicato comunque (il testo dice "già tra i consigli"). `items` dosati per ruolo (`NEED_ITEMS` in `scoring.js`; null se nessun oggetto e' sensato, es. cura per i core Pos 1-2). I bisogni 'Da definire' non hanno fix.
+- Jolly generalizzato (`wildcard`): oltre ai casi a bisogno singolo (rilevamento / anti-cura / resistenza magica, con le soglie sopra), se il top 3 non copre nessuna lacuna Mancante (e gli alleati sono >= 2) il jolly e' l'eroe del ruolo, fuori dal top 3, che copre piu' lacune (almeno 2, peso >= 2; push pesa 0.5, meccaniche 1.5, gli altri bisogni 1), con calo <= 2,5 punti (`GEN_GAP` in `scoring.js`; la spec iniziale prevedeva 3, o 4 con 3+ lacune, ma l'audit R8 e il parere tattico fissano 2,5: si cambia in un punto solo). Campi: `needKey/needLabel` (prima lacuna, compatibilita') + `needKeys/needLabels` (tutte quelle coperte). Priorita': bisogno singolo, poi generalizzato, poi `teamOnly`.
+
+## Come funziona
+- Rank bracket = `floor(rankTier/10)` (1 Herald .. 8 Immortal), default 4. Il winrate arriva da `heroStats` (`{b}_pick/{b}_win`), con smoothing; se il campione e' piccolo somma tutti i bracket.
+- Counter: da `/heroes/{id}/matchups` (usa anche il matchup inverso), come vantaggio rispetto al winrate base, ridotto verso 0 con pochi dati. Senza dati il counter e' neutro e la reason lo dice.
+- Sinergia: OpenDota non la espone (`/explorer` risponde 400). Senza STRATZ: euristica documentata in `scoring.js#pairSynergy`: iniziatore + follow-up (magico/disable), supporto/controllo + carry, push combinato, coppie note (`tags.js`), piccola penalita' per stessa posizione.
+- Ruolo (pos 1-5): dataset statico di posizioni per eroe in `tags.js`; per eroi non presenti si derivano dai ruoli OpenDota (Carry -> 1, Nuker int -> 2, Durable/Initiator -> 3, Support -> 4/5). Pos primaria = 1.0, secondaria 0.75, altrimenti 0.15 (e filtrati se ci sono abbastanza alternative).
+- Bisogni squadra: tag statici 0..3 (`tags.js`) + ruoli OpenDota per i non coperti; somma degli alleati / soglia = `level`. I pick che coprono i bisogni scoperti ricevono bonus (peso scalato con il numero di alleati).
+- Modello (`scoring.js#suggest`): winrate atteso in log-odds. `logit(p) = BASE_SHRINK*logit(winrate base del bracket) + shift`, dove `shift` = somma dei delta matchup contro ogni nemico (COUNTER_SCALE) + somma dei delta sinergia con ogni alleato (SYN_SCALE), ciascuno con shrinkage per numero di partite (matchup K=150, sinergia K=800, minimo partite per STRATZ), compresso con tanh (MAX_SHIFT) per evitare attesi irrealistici. BASE_SHRINK=0.6 regredisce i winrate pub verso 50% (bias di selezione). Punteggio = `50 + (p-0.5)*400` + modificatori additivi in punti: fit di ruolo (secondaria -8, assente -30), bisogni di squadra (fino a +8, scalati sugli alleati), bisogni da meccaniche nemiche (fino a +10), meta (+-3), pro (~+-1), difficolta', `balance.js` (+-4); clamp 0..100. Il Pick espone anche `expectedWinrate` (%); `winrate` resta il valore base, `counter`/`synergy` i valori 0-100 (50 neutro).
+- Reasons: max 4 (la prima e' sempre il winrate atteso, poi le piu' rilevanti per impatto in punti; balance e difficolta' hanno priorita'). Rank in italiano (Araldo..Immortale), numeri con la virgola. Sinergia: testo con chi inizia e chi segue; con STRATZ la percentuale compare solo con >= 300 partite.
+- Meccaniche (`tags.js`: MECH_THREATS / MECH_ANSWERS / MECH_NEEDS): minacce nemiche (invisibili, illusioni, cura forte, burst magico, dipendenza dal mana) fanno comparire in `teamNeeds` chiavi extra `detection` (Rilevamento invisibili), `aoe` (Danno ad area contro illusioni), `antiheal` (Anti-cura), `magicres` (Resistenza magica), `manaburn`, con le sei chiavi base sempre in testa e un campo extra `threat` (nomi dei nemici). Soglie: 2+ eroi invisibili / con illusioni (peso >= 2), cura >= 5, burst magico >= 6, dipendenza mana >= 7. Le risposte sono curate a mano senza contare oggetti (Dust/Gem/Sentry); anti-cura e' certo solo per Ancient Apparition (Necrophos parziale); Pugna NON e' resistenza magica (Decrepify amplifica il danno magico).
+- Difficolta' (`tags.js#DIFFICULTY`, per nome): 2 = alta (micro intensiva o forte dipendenza da gestione/timing/mappa), 1 = media. Malus: Araldo-Crociato -12 / -2.5 (un eroe difficile e' primo solo con un margine netto), Arconte-Leggenda -2.5 / -1, da Antico nessuno. Reason "Eroe complesso: rischioso a questo rank" quando il malus e' >= 2.5 su top/alternative.
+- Fit ruolo (modificatore, non componente del winrate): posizioni curate per NOME eroe in `tags.js#POS_BY_NAME` (quasi tutto il roster); primaria 1.0, secondaria 0.6, altrimenti 0.15. Per eroi nuovi non elencati, Pos 1 richiede ruolo Carry OpenDota + attributo agi/str; gli eroi con >4 ruoli OpenDota hanno tag derivati dimezzati (tuttofare).
+
+## File
+`index.js` API · `data.js` caricamento/cache · `scoring.js` punteggio · `tags.js` dataset tag · `sample-data.json` dati ESEMPIO (68 eroi, numeri inventati) · `tools/gen-sample.js` generatore · `selfcheck.js`.
+
+## Limiti noti
+Tag e posizioni sono curati a mano (indipendenti dalla versione); lane/posizioni reali da `/scenarios/laneRoles` non sono usati. Eroi nuovi non nel dataset usano solo i ruoli OpenDota. La sinergia e' euristica. `heroImageUrl` offline conosce solo gli eroi del sample.
+

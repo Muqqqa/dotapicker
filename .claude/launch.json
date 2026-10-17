@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "overlay-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve-preview.js"],
+      "port": 5173
+    },
+    {
+      "name": "playground",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/playground/server.js"],
+      "port": 5174
+    }
+  ]
+}

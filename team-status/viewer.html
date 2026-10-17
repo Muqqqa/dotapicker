@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio del Picker</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#181818;--paper:#f8f8f0;--gb-dark:#306850;--gb-mid:#58a878;--hp-g:#48c848;--hp-y:#e8c820;--hp-r:#e04030}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#203830;color:var(--ink);font-family:'Press Start 2P',monospace;font-size:10px;line-height:1.6;display:flex;justify-content:center;padding:16px}
+.game{width:100%;max-width:704px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:14px;color:#f8f8f0;text-align:center;letter-spacing:1px;text-shadow:2px 2px 0 #102018}
+.screen{border:6px solid var(--ink);background:var(--ink);box-shadow:0 0 0 4px #98b8a8;image-rendering:pixelated}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.cards{grid-template-columns:1fr}}
+.card{background:var(--paper);border:4px solid var(--ink);box-shadow:inset 0 0 0 2px #b8b8a8,4px 4px 0 #102018;padding:10px;text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:44px;display:flex;flex-direction:column;gap:6px}
+.card[aria-pressed="true"]{outline:4px solid #e8c820;outline-offset:2px}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.nm{font-size:10px}.lv{font-size:8px}
+.hpwrap{display:flex;align-items:center;gap:6px;font-size:8px}
+.hpbar{flex:1;height:10px;border:2px solid var(--ink);background:#e8e8d8}
+.hpfill{height:100%;background:var(--hp-g);transition:width .6s steps(8)}
+.st{font-size:8px}
+.dialog{background:var(--paper);border:6px solid var(--ink);box-shadow:inset 0 0 0 3px #b8b8a8,4px 4px 0 #102018;padding:14px 16px 18px;min-height:112px;position:relative;font-size:10px;line-height:2}
+.dialog .who{font-size:8px;color:#a03020;margin-bottom:2px}
+.arrow{position:absolute;right:14px;bottom:8px;color:#d03020;animation:bl 1s steps(1) infinite}
+@keyframes bl{50%{opacity:0}}
+.foot{color:#98b8a8;font-size:8px;text-align:center}
+</style>
+</head>
+<body>
+<main class="game">
+<h1>LABORATORIO DEL PICKER</h1>
+<div class="screen"><canvas id="cv" width="320" height="224" aria-label="Scena del team di agenti al lavoro" role="img"></canvas></div>
+<div class="cards" id="cards"></div>
+<div class="dialog" aria-live="polite"><div class="who" id="who"></div><div id="msg"></div><span class="arrow">&#9660;</span></div>
+<div class="foot">Si aggiorna da solo ogni 2 secondi · clicca un agente per leggerne il log</div>
+</main>
+<script>
+(function(){
+var AG=[
+ {id:'tactician',name:'TACTICIAN',job:'TATTICO',hair:'#7a3b1d',cloth:'#c04040',x:72,y:84},
+ {id:'app-dev',name:'APP-DEV',job:'SVILUPPO',hair:'#2a2a38',cloth:'#3868c8',x:248,y:84},
+ {id:'ui-designer',name:'UI-DESIGNER',job:'GRAFICA',hair:'#e0b830',cloth:'#a050c8',x:72,y:164},
+ {id:'tester',name:'TESTER',job:'COLLAUDO',hair:'#585858',cloth:'#30a060',x:248,y:164}
+];
+var SPR=[
+"....dddd....","...dhhhhd...","..dhhhhhhd..","..dhsssshd..","..dsdssdsd..","..dssssssd..","...dssssd...",
+".dcccccccccd","dsccccccccsd","dsccwwwwccsd",".dccccccccd.","..dppddppd..","..dpp..ppd..","..ddd..ddd.."];
+var STATES={working:'AL LAVORO',idle:'IN ATTESA',done:'COMPLETATO',blocked:'BLOCCATO'};
+var cv=document.getElementById('cv'),cx=cv.getContext('2d');
+var sel=0,auto=true,typed='',typeTarget='',typeIdx=0,lastKey='';
+function st(a){var s=(window.TEAM_STATUS||{})[a.id];return s||{state:'idle',task:'Nessun segnale',progress:0,log:[]}}
+function px(c,x,y,w,h){cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),w,h)}
+function sprite(a,x,y,flash){
+  var col={d:'#181818',h:a.hair,s:'#f0c898',c:a.cloth,w:'#f8f8f8',p:'#384878'};
+  for(var r=0;r<SPR.length;r++)for(var c=0;c<12;c++){var k=SPR[r][c];if(k!=='.')px(col[k],x+c*2,y+r*2,2,2)}
+}
+function floor(){
+  for(var y=0;y<224;y+=16)for(var x=0;x<320;x+=16){px(((x+y)/16)%2?'#e0c890':'#d8bc80',x,y,16,16)}
+  px('#6878b0',0,0,320,40);px('#8898c8',0,0,320,8);px('#505c90',0,32,320,8);
+  for(var i=0;i<320;i+=40)px('#586498',i,10,2,22);
+  // window + poster
+  px('#181818',140,6,40,26);px('#98d8f0',142,8,36,22);px('#f8f8f8',159,8,2,22);px('#f8f8f8',142,18,36,2);
+  // rugs
+  px('#c85848',100,100,120,56);px('#e8a898',104,104,112,48);
+}
+function desk(a,t,s){
+  var x=a.x,y=a.y;
+  px('#181818',x-30,y+16,60,22);px('#a07038',x-28,y+18,56,18);px('#c8904c',x-28,y+18,56,4);
+  // monitor
+  px('#181818',x-12,y+2,24,16);
+  var on=s.state==='working',glow=on?(Math.floor(t/300)%2?'#78f8a0':'#58d880'):s.state==='blocked'?'#f86858':s.state==='done'?'#f8e868':'#406048';
+  px(glow,x-10,y+4,20,11);
+  if(on){for(var i=0;i<3;i++)px('#206040',x-8,y+6+i*3,6+((Math.floor(t/200)+i)%3)*3,1)}
+}
+function bubble(a,t,s){
+  var x=a.x+22,y=a.y-22;
+  if(s.state==='blocked'){px('#181818',x-1,y-1,12,16);px('#f8f8f8',x,y,10,14);px('#e03020',x+4,y+2,2,6);px('#e03020',x+4,y+10,2,2)}
+  else if(s.state==='idle'){var f=Math.floor(t/500)%3;px('#486880',x+f*3,y+8-f*4,6,2);px('#486880',x+f*3+4,y+10-f*4,2,2);px('#486880',x+f*3,y+12-f*4,6,2)}
+  else if(s.state==='done'){var st=Math.floor(t/250)%2;px('#e8c820',x+4,y+(st?2:4),4,4);px('#f8f0a0',x+5,y+(st?3:5),2,2);px('#e8c820',x+2,y+(st?4:6),8,2)}
+  else{var n=Math.floor(t/250)%4;for(var i=0;i<3;i++)px(i<n?'#181818':'#a89870',x+i*4,y+10,2,2)}
+}
+function draw(t){
+  floor();
+  AG.forEach(function(a,i){
+    var s=st(a);desk(a,t,s);
+    var bob=0;
+    if(s.state==='working')bob=(Math.floor(t/250)%2)?-1:0;
+    if(s.state==='done')bob=-Math.abs(Math.round(Math.sin(t/180)*4));
+    sprite(a,a.x-12,a.y-14+bob+(s.state==='idle'?2:0),false);
+    bubble(a,t,s);
+    if(i===sel){var yy=a.y-34;px('#e03020',a.x-4,yy,8,2);px('#e03020',a.x-2,yy+2,4,2)}
+  });
+}
+function cards(){
+  var h=cards.html||(cards.html=document.getElementById('cards'));
+  if(!h.children.length){AG.forEach(function(a,i){
+    var b=document.createElement('button');b.className='card';b.type='button';
+    b.innerHTML='<div class="row"><span class="nm"></span><span class="lv"></span></div><div class="hpwrap">PG<div class="hpbar"><div class="hpfill"></div></div></div><div class="st"></div>';
+    b.onclick=function(){sel=i;auto=false;lastKey='';say()};
+    h.appendChild(b)})}
+  AG.forEach(function(a,i){
+    var s=st(a),b=h.children[i],p=Math.max(0,Math.min(100,s.progress||0));
+    b.setAttribute('aria-pressed',i===sel);
+    b.querySelector('.nm').textContent=a.name;
+    b.querySelector('.lv').textContent=':L'+p;
+    var f=b.querySelector('.hpfill');f.style.width=p+'%';f.style.background=s.state==='blocked'?'var(--hp-r)':p<34?'var(--hp-y)':'var(--hp-g)';
+    b.querySelector('.st').textContent=a.job+' · '+(STATES[s.state]||'?');
+  });
+}
+function say(){
+  var a=AG[sel],s=st(a),lines=[s.task||''].concat((s.log||[]).slice(-3));
+  var text=lines.filter(Boolean).join('\n');
+  document.getElementById('who').textContent=a.name+' ('+(STATES[s.state]||'?')+')';
+  if(text!==typeTarget){typeTarget=text;typeIdx=0}
+}
+function typer(){
+  if(typeIdx<typeTarget.length)typeIdx+=2;
+  var el=document.getElementById('msg');
+  el.textContent='';
+  typeTarget.slice(0,typeIdx).split('\n').forEach(function(l,i){if(i)el.appendChild(document.createElement('br'));el.appendChild(document.createTextNode(l))});
+}
+function load(){
+  AG.forEach(function(a){
+    var s=document.createElement('script');s.src=a.id+'.js?t='+Date.now();
+    s.onload=s.onerror=function(){s.remove()};document.head.appendChild(s);
+  });
+}
+function loop(t){draw(t);requestAnimationFrame(loop)}
+load();setInterval(load,2000);
+setInterval(function(){cards();say()},700);
+setInterval(function(){if(auto)sel=(sel+1)%AG.length},7000);
+setInterval(typer,45);
+cards();say();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+window.TEAM_STATUS=window.TEAM_STATUS||{};window.TEAM_STATUS['tactician']={"state":"done","task":"estimateMatch completato","progress":100,"log":["match.js + calibration.json (2104 partite, accuratezza 57,4%, Brier 0,2404)","selfcheck 38/38, npm test 0 fail, stress ok"],"updated":"2026-10-17T10:33:55.449Z"};

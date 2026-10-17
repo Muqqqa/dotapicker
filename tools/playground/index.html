@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco di prova</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/playground.css">
+</head>
+<body>
+<header class="top">
+  <h1>Banco di prova del Picker</h1>
+  <p id="provider" class="muted">Componi una draft, guarda il consiglio nell'overlay vero e dai il tuo giudizio.</p>
+</header>
+<main class="layout">
+  <section class="panel" aria-labelledby="h-draft">
+    <h2 id="h-draft">Draft</h2>
+    <div class="row">
+      <label for="rank">Rank lobby</label>
+      <select id="rank"></select>
+    </div>
+    <fieldset class="row">
+      <legend>Il tuo ruolo</legend>
+      <div class="seg" id="roles"></div>
+    </fieldset>
+    <div class="sides">
+      <div>
+        <div class="side-head"><span class="ally">Alleati</span><span id="ally-count" class="muted">0/4</span></div>
+        <div class="chips" id="allies"></div>
+      </div>
+      <div>
+        <div class="side-head"><span class="enemy">Nemici</span><span id="enemy-count" class="muted">0/5</span></div>
+        <div class="chips" id="enemies"></div>
+      </div>
+    </div>
+    <fieldset class="row">
+      <legend>Aggiungi a</legend>
+      <div class="seg" id="target">
+        <button type="button" data-t="allies" aria-pressed="false">Alleati</button>
+        <button type="button" data-t="enemies" aria-pressed="true">Nemici</button>      </div>
+    </fieldset>
+    <label for="search" class="sr">Cerca eroe</label>
+    <input id="search" type="search" placeholder="Cerca eroe…" autocomplete="off">
+    <div class="grid" id="grid" role="list"></div>
+    <div class="actions">
+      <button type="button" id="random" class="ghost">Draft casuale</button>
+      <button type="button" id="random-full" class="ghost">Draft completa casuale</button>
+      <button type="button" id="clear" class="ghost">Svuota</button>
+    </div>
+  </section>
+
+  <section class="overlay" aria-label="Anteprima overlay">
+    <iframe id="frame" title="Overlay Dota Picker" src="/renderer/index.html?mock=1&amp;embed=1"></iframe>
+  </section>
+
+  <section class="panel" aria-labelledby="h-eval">
+    <h2 id="h-eval">La tua valutazione</h2>
+    <p id="eval-empty" class="muted">Aggiungi almeno un eroe per vedere i consigli da valutare.</p>
+    <form id="eval" hidden>
+      <fieldset class="row" id="estimate-q" hidden>
+        <legend id="estimate-label">La stima di vittoria ti sembra plausibile?</legend>
+        <div class="seg" data-q="estimate">
+          <button type="button" data-v="si" aria-pressed="false">Sì</button>
+          <button type="button" data-v="troppo_alta" aria-pressed="false">Troppo alta</button>
+          <button type="button" data-v="troppo_bassa" aria-pressed="false">Troppo bassa</button>
+        </div>
+      </fieldset>
+      <div id="picks"></div>
+      <div id="gaps-box" class="row" hidden>
+        <span class="lbl">Lacune della squadra e soluzioni</span>
+        <ul id="gaps" class="gaps"></ul>
+      </div>
+      <fieldset class="row" id="fixes-q" hidden>
+        <legend>Le soluzioni proposte (eroi e oggetti) sono utili?</legend>
+        <div class="seg" data-q="fixes">
+          <button type="button" data-v="si" aria-pressed="false">Sì</button>
+          <button type="button" data-v="in_parte" aria-pressed="false">In parte</button>
+          <button type="button" data-v="no" aria-pressed="false">No</button>
+        </div>
+      </fieldset>
+      <fieldset class="row">
+        <legend>La composizione squadra è corretta?</legend>
+        <div class="seg" data-q="needs">
+          <button type="button" data-v="si" aria-pressed="false">Sì</button>
+          <button type="button" data-v="in_parte" aria-pressed="false">In parte</button>
+          <button type="button" data-v="no" aria-pressed="false">No</button>
+        </div>
+      </fieldset>
+      <fieldset class="row">
+        <legend>Voto complessivo</legend>
+        <div class="seg" data-q="overall">
+          <button type="button" data-v="1" aria-pressed="false">1</button>
+          <button type="button" data-v="2" aria-pressed="false">2</button>
+          <button type="button" data-v="3" aria-pressed="false">3</button>
+          <button type="button" data-v="4" aria-pressed="false">4</button>
+          <button type="button" data-v="5" aria-pressed="false">5</button>
+        </div>
+      </fieldset>
+      <div class="row">
+        <label for="better">Eroe che avresti preso tu (facoltativo)</label>
+        <input id="better" list="hero-names" autocomplete="off">
+        <datalist id="hero-names"></datalist>
+      </div>
+      <div class="row">
+        <label for="note">Note</label>
+        <textarea id="note" rows="4" placeholder="Cosa non torna, cosa manca, cosa ti è piaciuto…"></textarea>
+      </div>
+      <button type="submit" class="primary">Salva valutazione</button>
+      <p id="saved" class="muted" aria-live="polite"></p>
+    </form>
+  </section>
+</main>
+<script src="/playground.js"></script>
+</body>
+</html>
