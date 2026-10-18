@@ -21,7 +21,7 @@ const REGION = [0.22, 0.05, 0.78, 0.6]; // frazioni x0,y0,x1,y1 del ritratto
 const MIN_SCORE = 0.5;
 const MIN_MARGIN = 0.08;
 const SHORTLIST = 8;
-const EMPTY_SD = 9; // deviazione standard di luminanza sotto cui il riquadro e' vuoto
+const EMPTY_SD = 16; // deviazione standard di luminanza sotto cui il riquadro e' vuoto o mostra solo l'anteprima oscurata dell'eroe selezionato ma non ancora bloccato (sd ~9; slot vuoto ~6; eroe vero >= 27)
 
 /** Estrae un vettore float RGB (scarta alpha) da un buffer 4 canali. */
 function toVector(buf4) {

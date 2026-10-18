@@ -147,3 +147,44 @@ test('controller finto: strategy-time-dire -> draft, slot 5 dire, squadre, match
     try { await ctl.nameOcr.terminate(); await ctl.ocr.terminate(); } catch (e) { /* ok */ }
   }
 });
+
+// ---- il ruolo scelto a mano resta per tutta la draft ----
+test('controller finto: il ruolo scelto a mano NON si azzera quando cambiano i pick', async (t) => {
+  const c = icons(t); if (!c) return;
+  if (!exists('src', 'main', 'controller.js')) return t.skip('controller assente');
+  const { Controller } = require(p('src', 'main', 'controller.js'));
+  const { Store } = require(p('src', 'main', 'store.js'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-role-'));
+  fs.mkdirSync(path.join(dir, 'hero-icons'));
+  for (const f of fs.readdirSync(ICON_DIR)) if (/^\d+\.png$/.test(f)) fs.copyFileSync(path.join(ICON_DIR, f), path.join(dir, 'hero-icons', f));
+  fs.copyFileSync(HEROES_FILE, path.join(dir, 'heroes.json'));
+  const store = new Store(dir);
+  store.set('steamId', '76561198000000000'); store.set('rankTier', 55); store.set('personaname', "Mooq'a#PEPPE");
+  const realFetch = global.fetch;
+  global.fetch = async () => { throw new Error('rete disattivata nei test'); };
+  // draft con pochi pick (all-pick: barra con 10 slot, ritratti ancora vuoti) poi draft completa: la composizione cambia
+  const before = fakeElectron(fixture('draft-allpick-dire.png'));
+  const after = fakeElectron(fixture('strategy-time-dire.png'));
+  let frame = before;
+  const ctl = new Controller({ store, userDataDir: dir, nativeImage: null, emit: () => {},
+    screen: before.screen, desktopCapturer: { getSources: (o) => frame.desktopCapturer.getSources(o) } });
+  try {
+    ctl.lastProfileOk = Date.now();
+    for (let i = 0; i < 100 && !(ctl.matcher && ctl.matcher.ready); i++) { await ctl.ensureMatcher(); await new Promise((r) => setTimeout(r, 100)); }
+    assert.ok(ctl.matcher && ctl.matcher.ready, 'matcher non pronto');
+    await ctl.tick();
+    ctl.setRole(4);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(ctl.manualRole, 4, 'ruolo impostato');
+    // arrivano i pick degli altri giocatori: la composizione di alleati/nemici cambia a ogni tick
+    frame = after;
+    for (let i = 0; i < 3; i++) { await ctl.tick(); assert.equal(ctl.manualRole, 4, 'tick ' + i + ': il ruolo scelto non deve azzerarsi'); }
+    assert.equal(ctl.state.role, 4, 'lo stato mostra ancora il ruolo scelto');
+    // nuova draft: decade
+    ctl.resetDraft();
+    assert.equal(ctl.manualRole, null, 'una nuova draft azzera il ruolo scelto');
+  } finally {
+    global.fetch = realFetch;
+    try { await ctl.nameOcr.terminate(); await ctl.ocr.terminate(); } catch (e) { /* ok */ }
+  }
+});

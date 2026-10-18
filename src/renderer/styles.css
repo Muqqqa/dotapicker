@@ -34,6 +34,7 @@ button{cursor:pointer}
 .hero.square{aspect-ratio:1/1}
 .hero .fallback{padding:4px;text-align:center;font-family:var(--f-head);font-weight:600;font-size:13px;line-height:1.1;color:var(--text);text-transform:uppercase;word-break:break-word}
 .hero.empty{border-style:dashed;background:transparent;color:var(--muted)}
+.hero.me{outline:2px solid var(--amber);outline-offset:1px}
 
 /* teams */
 .teams{display:grid;grid-template-columns:1fr 1fr;gap:12px}

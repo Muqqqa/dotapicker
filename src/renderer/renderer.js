@@ -227,9 +227,14 @@
     ]);
   }
 
-  function teamBlock(title, cls2, list, emptyMsg) {
+  function teamBlock(title, cls2, list, emptyMsg, meFirst) {
     var row = el('div', { class: 'row' });
-    for (var i = 0; i < 5; i++) row.appendChild(heroTile(list[i] || null));
+    for (var i = 0; i < 5; i++) {
+      var tile = heroTile(list[i] || null);
+      // il tuo eroe e' il primo della squadra alleata: evidenziato, cosi' lo slot non resta vuoto dopo il tuo pick
+      if (meFirst && i === 0 && list[0]) { tile.classList.add('me'); tile.setAttribute('title', 'Tu: ' + (list[0].name || '')); }
+      row.appendChild(tile);
+    }
     return el('section', { class: 'team ' + cls2, 'aria-label': title }, [
       el('h2', {}, [el('span', { text: title }), el('span', { text: list.length + '/5' })]), row,
       list.length ? null : el('div', { class: 'row-note', text: emptyMsg })
@@ -480,7 +485,7 @@
   }
   function teamBlockPair(s) {
     return el('div', { class: 'teams' }, [
-      teamBlock('Alleati', 'allies', s.allies || [], 'Nessun alleato ancora.'),
+      teamBlock('Alleati', 'allies', (s.myHero ? [s.myHero] : []).concat(s.allies || []), 'Nessun alleato ancora.', !!s.myHero),
       teamBlock('Nemici', 'enemies', s.enemies || [], 'Nessun nemico ancora.')
     ]);
   }

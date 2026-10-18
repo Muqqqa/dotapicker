@@ -17,7 +17,8 @@ const png = require('../ocr/png');
 const FALLBACK_RANK = 40; // Archon, se il profilo non espone rank
 const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/';
 const PROFILE_REFRESH_MS = 10 * 60 * 1000; // personaname: aggiornato se cambia
-const NAME_OCR_EVERY_MS = 2500;            // OCR dei nomi finche' lo slot non e' trovato
+const MAX_NEW_BANS_PER_TICK = 30;          // oltre: la griglia e' in dissolvenza/oscurata, non sono ban veri
+const NAME_OCR_EVERY_MS = 2500;           // OCR dei nomi finche' lo slot non e' trovato
 
 // Un worker OCR che si blocca o muore non deve fermare per sempre il ciclo principale: dopo il tempo massimo si rinuncia a quella lettura.
 function withTimeout(promise, ms, what) {
@@ -99,6 +100,7 @@ class Controller {
   resetDraft() {
     this.draft = this.freshDraft();
     this.lastSig = '';
+    this.manualRole = null; // nuova draft: il ruolo scelto a mano decade
   }
 
   getState() { return this.state; }
@@ -131,9 +133,7 @@ class Controller {
 
   setRole(r) {
     this.manualRole = r >= 1 && r <= 5 ? r : null;
-    // baseline: l'override decade quando l'OCR rileva un cambio di ruolo o di draft
-    this.manualBase = null; // popolata al prossimo tick con la lettura corrente
-    this.manualPending = !!this.manualRole;
+    // vale per tutta la draft in corso (vedi tick e resetDraft)
     this.lastSig = '';
     this.tick();
     return { ok: true, role: this.manualRole };
@@ -440,11 +440,16 @@ class Controller {
       if (!statusCache.has(k)) statusCache.set(k, heroGrid.tileStatus(rgba, r));
       return statusCache.get(k);
     };
+    const found = [];
     for (const [id, r] of map.byHero) {
       const st = statusOfRect(r);
-      if (st === 'banned' || st === 'unavailable') this.draft.banned.add(id);
+      if (st === 'banned' || st === 'unavailable') found.push(id);
       else if (st === 'available') this.learnTemplate(rgba, id, r);
     }
+    // oltre MAX_NEW_BANS_PER_TICK ban nuovi in un colpo solo la griglia e' in dissolvenza o oscurata (passaggio a
+    // Strategy Time): non sono ban veri e non vanno memorizzati
+    if (found.filter((id) => !this.draft.banned.has(id)).length > MAX_NEW_BANS_PER_TICK) return null;
+    for (const id of found) this.draft.banned.add(id);
     this.saveGridTemplates();
     const tpls = this.loadGridTemplates();
     const status = (heroId) => {
@@ -580,21 +585,15 @@ class Controller {
       }
 
       const role0 = img ? await this.readRole(img, ri) : null;
-      if (this.manualRole) {
-        const draftSig = JSON.stringify([allies, enemies, myId]);
-        if (this.manualPending) {
-          this.manualBase = { ocr: role0, draft: draftSig };
-          this.manualPending = false;
-        } else if ((role0 && role0 !== this.manualBase.ocr) || draftSig !== this.manualBase.draft) {
-          this.manualRole = null; // OCR ha rilevato un nuovo draft/ruolo
-        }
-      }
+      // il ruolo scelto a mano vale per tutta la draft: i pick degli altri giocatori NON lo azzerano. Decade solo
+      // quando comincia una nuova draft (resetDraft: la barra sparisce o si svuota).
       const role = this.manualRole || role0;
       const lobby = lobbyRankTier(userRank, []); // rank avversari ignoto: usa rank utente
 
       // griglia: aggiorna i bannati della draft (anche prima di avere un ruolo)
       let gridCtx = null;
-      if (tb && rgba) { try { gridCtx = this.buildGridContext(rgba, ri, tb); } catch (e) { gridCtx = null; } }
+      // in Strategy Time la griglia degli eroi non c'e' piu': leggerla darebbe riquadri oscurati scambiati per ban
+      if (tb && rgba && tb.layout !== 'strategy') { try { gridCtx = this.buildGridContext(rgba, ri, tb); } catch (e) { gridCtx = null; } }
 
       const base = {
         rankTier: userRank, lobbyRankTier: lobby, role,
